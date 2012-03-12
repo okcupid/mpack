@@ -12,7 +12,6 @@ import (
     "time"
 )
 
-type GenericMap map[string]interface{}
 type GenericList []interface{}
 
 // the handler type for rpc calls
