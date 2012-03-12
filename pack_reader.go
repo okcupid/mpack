@@ -10,11 +10,11 @@ import (
 )
 
 /*
-type FullReader interface {
-	io.ByteReader
-	io.Reader
-}
-*/
+ type FullReader interface {
+ io.ByteReader
+ io.Reader
+ }
+ */
 
 type PackReader struct {
 	reader io.Reader
@@ -233,4 +233,4 @@ func (pr PackReader) unpack() (interface{}, int, error) {
 
     return iRes, numRead, err
 }
-	
+
