@@ -12,8 +12,6 @@ import (
     "time"
 )
 
-type GenericList []interface{}
-
 // the handler type for rpc calls
 type handler func(arg interface{}) (interface{}, error)
 
