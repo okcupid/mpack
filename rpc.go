@@ -28,7 +28,7 @@ func Handle(name string, function handler) error {
 	return nil
 }
 
-func ListenAndServe(host string) {
+func ListenAndServe(host string, framed bool) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", host)
 	if err != nil {
 		log.Printf("error resolving address %s: %s", host, err)
@@ -51,17 +51,17 @@ func ListenAndServe(host string) {
 			log.Fatalf("accept error: %v", err)
 		}
 
-		go serve(conn)
+		go serve(conn, framed)
 		log.Printf("connection established: %s", conn)
 	}
 }
 
-func serve(conn net.Conn) {
+func serve(conn net.Conn, framed bool) {
 	results := make(chan []byte, 1024)
 	quit := make(chan bool)
 	go sendResults(results, quit, conn)
 	for {
-		rpc, _, err := Unpack(conn)
+		rpc, _, err := Unpack(conn, framed)
 		if err != nil {
 			quit <- true
 			return
@@ -183,6 +183,7 @@ type RPCClient struct {
 	idCounter      int64
 	outputChannels map[int64]chan interface{}
 	Connected      bool
+	Framed         bool
 }
 
 func NewRPCClient(host string) (*RPCClient, error) {
@@ -206,7 +207,7 @@ func NewRPCClient(host string) (*RPCClient, error) {
 
 func (client *RPCClient) StartReader() {
 	for {
-		generic, _, err := Unpack(client.conn)
+		generic, _, err := Unpack(client.conn, client.Framed)
 		if err != nil {
 			if err == io.EOF {
 				log.Printf("%s: eof", client.Host)

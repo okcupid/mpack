@@ -17,7 +17,7 @@ func Pack(w io.Writer, value interface{}) (packedBytes int, err error) {
 	return n, e
 }
 
-func Unpack(reader io.Reader) (interface{}, int, error) {
-	pr := NewPackReader(reader)
+func Unpack(reader io.Reader, framed bool) (interface{}, int, error) {
+	pr := NewPackReader(reader, framed)
 	return pr.unpack()
 }

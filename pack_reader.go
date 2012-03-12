@@ -18,11 +18,13 @@ type FullReader interface {
 
 type PackReader struct {
 	reader io.Reader
+	framed bool
 }
 
-func NewPackReader(r io.Reader) *PackReader {
+func NewPackReader(r io.Reader, f bool) *PackReader {
 	result := new(PackReader)
 	result.reader = r
+	result.framed = f
 	return result
 }
 
@@ -42,6 +44,11 @@ func (pr PackReader) ReadByte() (byte, error) {
 
 func (pr PackReader) ReadBinary(result interface{}) error {
 	return binary.Read(pr.reader, binary.BigEndian, result)
+}
+
+func (pr PackReader) ReadUint32() (tmp uint32, e error) {
+	e = pr.ReadBinary(&tmp)
+	return tmp, e
 }
 
 func (pr PackReader) unpackRaw(length uint32, prefixBytes int) (interface{}, int, error) {
@@ -102,6 +109,7 @@ func (pr PackReader) unpackMap(length uint32, prefixBytes int) (interface{}, int
 }
 
 func (pr PackReader) unpack() (interface{}, int, error) {
+
 	numRead := 0
 	b, err := pr.ReadByte()
 	if err != nil {

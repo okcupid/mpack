@@ -134,7 +134,7 @@ func (server *Server) replyError(conn net.Conn, msgid uint32, errmsg string) err
 func (server *Server) handleRPC(conn net.Conn) {
 	for {
 		startTime := time.Now()
-		rpc, _, err := Unpack(conn)
+		rpc, _, err := Unpack(conn,false)
 		if err != nil {
 			log.Printf("read error: %s", err)
 			return
@@ -266,7 +266,7 @@ func (c *Client) Call(method string, args interface{}) (interface{}, error) {
 		return nil, err
 	}
 
-	rpc, _, err := Unpack(c.Connection)
+	rpc, _, err := Unpack(c.Connection, false)
 	if err != nil {
 		log.Printf("read error: %s", err)
 		return nil, err
