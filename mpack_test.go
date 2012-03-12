@@ -3,7 +3,7 @@ package mpack_test
 import (
 	"bytes"
 	"fmt"
-	. "mpack"
+	"mpack"
 	"reflect"
 	"testing"
 )
