@@ -147,10 +147,10 @@ func (pr PackReader) unpack() (interface{}, int, error) {
 			iRes, err = pr.unpackRaw(uint32(b & fix_raw_count_mask))
 
 		} else if b >= type_fix_array_min && b <= type_fix_array_max {
-			iRes, err = pr.unpackArray(uint32(b&fix_array_count_mask))
+			iRes, err = pr.unpackArray(uint32(b & fix_array_count_mask))
 
 		} else if b >= type_fix_map_min && b <= type_fix_map_max {
-			iRes, err = pr.unpackMap(uint32(b&fix_map_count_mask))
+			iRes, err = pr.unpackMap(uint32(b & fix_map_count_mask))
 
 		} else {
             doswitch = true;
