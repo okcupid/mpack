@@ -19,263 +19,213 @@ type FullReader interface {
 type PackReader struct {
 	reader io.Reader
 	framed bool
+    offset uint64 
 }
 
 func NewPackReader(r io.Reader, f bool) *PackReader {
 	result := new(PackReader)
 	result.reader = r
 	result.framed = f
+    result.offset = 0
 	return result
 }
 
+func (pr PackReader) incOffset (i int) {
+    pr.offset += uint64(i);
+}
+
 func (pr PackReader) ReadBinary(result interface{}) error {
-	return binary.Read(pr.reader, binary.BigEndian, result)
+	e := binary.Read(pr.reader, binary.BigEndian, result)
+    if e == nil {
+        pr.incOffset (binary.Size(result));
+    }
+    return e
 }
 
-func (pr PackReader) ReadUint32() (tmp uint32, e error) {
-	e = pr.ReadBinary(&tmp)
-    return tmp, e
+func (pr PackReader) ReadUint8() (tmp uint8, e error)   { e = pr.ReadBinary(&tmp); return }
+func (pr PackReader) ReadUint32() (tmp uint32, e error) { e = pr.ReadBinary(&tmp); return }
+func (pr PackReader) ReadUint16() (tmp uint16, e error) { e = pr.ReadBinary(&tmp); return }
+func (pr PackReader) ReadUint64() (tmp uint64, e error) { e = pr.ReadBinary(&tmp); return }
+func (pr PackReader) ReadInt16() (tmp int16, e error)   { e = pr.ReadBinary(&tmp); return }
+func (pr PackReader) ReadInt32() (tmp int32, e error)   { e = pr.ReadBinary(&tmp); return }
+func (pr PackReader) ReadInt64() (tmp uint64, e error)  { e = pr.ReadBinary(&tmp); return }
+
+func (pr PackReader) ReadFloat32() (tmp float32, e error)  { e = pr.ReadBinary(&tmp); return }
+func (pr PackReader) ReadFloat64() (tmp float64, e error)  { e = pr.ReadBinary(&tmp); return }
+
+func (pr PackReader) unpackRaw(length uint32) (res []byte, e error) {
+
+    e = nil
+    res = nil
+    var n int
+    
+	if length > 0 {
+	    res = make([]byte, length)
+	    n, e = pr.reader.Read(res)
+        if e != nil {
+            pr.incOffset(n);
+            res = nil
+        }
+    }
+    return 
 }
 
-func (pr PackReader) ReadUint8() (tmp uint8, e error) {
-    e = pr.ReadBinary(&tmp)
-    return tmp, e
-}
+func (pr PackReader) unpackArray(length uint32) (res []interface{}, e error) {
 
-func (pr PackReader) unpackRaw(length uint32, prefixBytes int) (interface{}, int, error) {
-	if length == 0 {
-		// lenght == 0 => nil...
-		return nil, 0, nil
+    res = nil
+    e = nil
+
+	res = make([]interface{}, length)
+	for i := uint32(0); e == nil && i < length; i++ {
+        var elt interface{}
+		elt,_,e = pr.unpack()
+		if e == nil {
+		    res[i] = elt
+        }
 	}
-	numRead := prefixBytes
-	data := make([]byte, length)
-	n, err := pr.reader.Read(data)
-	numRead += n
-	if err != nil {
-		return nil, numRead, err
-	}
-	return data, numRead, nil
+	return
 }
 
-func (pr PackReader) unpackArray(length uint32, prefixBytes int) (interface{}, int, error) {
-	numRead := prefixBytes
-	data := make([]interface{}, length)
-	for i := uint32(0); i < length; i++ {
-		elt, n, err := pr.unpack()
-		numRead += n
-		if err != nil {
-			return nil, numRead, err
-		}
-		data[i] = elt
-	}
-	return data, numRead, nil
-}
+func (pr PackReader) unpackMap(length uint32) (res map[interface{}]interface{}, err error) {
 
-func (pr PackReader) unpackMap(length uint32, prefixBytes int) (interface{}, int, error) {
-	numRead := prefixBytes
+	res = make(map[interface{}]interface{})
+    err = nil
 
-	m := make(map[interface{}]interface{})
+	for i := uint32(0); err == nil && i < length; i++ {
+        var key, val interface{}
 
-	for i := uint32(0); i < length; i++ {
-		key, n, err := pr.unpack()
-		numRead += n
-		if err != nil {
-			return nil, numRead, err
-		}
+		key, _, err = pr.unpack()
+		if err == nil {
+		    val, _, err = pr.unpack()
+        }
 
-		val, n, err := pr.unpack()
-		numRead += n
-		if err != nil {
-			return nil, numRead, err
-		}
-
-		if reflect.TypeOf(key).String() == "[]uint8" {
-			m[string(key.([]uint8))] = val
+        if err != nil { 
+            /* noop */ 
+        } else if reflect.TypeOf(key).String() == "[]uint8" {
+			res[string(key.([]uint8))] = val
 		} else {
-			m[key] = val
-		}
+			res[key] = val
+        }
 	}
 
-	return m, numRead, nil
+	return res, err
 }
 
 func (pr PackReader) unpack() (interface{}, int, error) {
 
-	numRead := 0
 	frame := 0;
     var b uint8;
-    var err error;
+    var err error = nil;
+    var start uint64 = pr.offset;
 
     var iRes interface{} = nil;
 
 	// Threaded implementation won't need to worry, so we can
 	// just throw the framing away....
-    var ok bool = true;
 	if pr.framed {
         var tmp uint32
         tmp, err = pr.ReadUint32()
-        if err != nil {
-            ok = false;
-        } else {
+        if err == nil {
             frame = int(tmp);
         }
 	}
 
-    if ok {
+    if err != nil {
 	    b, err = pr.ReadUint8()
-	    if err != nil {
-            ok = false;
-        }
     }
 
     doswitch := false
 
-    if ok {
+    if err != nil {
 
-		numRead += 1
-
-		// how is this possible?
-		if b < 0 {
-			return nil, numRead, nil
-		} else if b < positive_fix_max {
-			return b, numRead, nil
+		if b < positive_fix_max {
+            iRes = b
 		} else if b >= negative_fix_min && b <= negative_fix_max {
-			return (b & negative_fix_mask) - negative_fix_offset, numRead, nil
+            iRes = (b & negative_fix_mask) - negative_fix_offset
+
 		} else if b >= type_fix_raw && b <= type_fix_raw_max {
-			return pr.unpackRaw(uint32(b&fix_raw_count_mask), numRead)
+			iRes, err = pr.unpackRaw(uint32(b & fix_raw_count_mask))
+
 		} else if b >= type_fix_array_min && b <= type_fix_array_max {
-			return pr.unpackArray(uint32(b&fix_array_count_mask), numRead)
+			iRes, err = pr.unpackArray(uint32(b&fix_array_count_mask))
+
 		} else if b >= type_fix_map_min && b <= type_fix_map_max {
-			return pr.unpackMap(uint32(b&fix_map_count_mask), numRead)
+			iRes, err = pr.unpackMap(uint32(b&fix_map_count_mask))
+
 		} else {
             doswitch = true;
         }
     }
 
-    if ok && doswitch {
+    if doswitch && err == nil {
 
         switch b {
 		case type_nil:
-			return nil, numRead, nil
 		case type_false:
-			return false, numRead, nil
+            iRes = false;
 		case type_true:
-			return true, numRead, nil
+            iRes = true;
 		case type_uint8:
-			b, err := pr.ReadUint8();
-			if err != nil {
-				return nil, numRead + 1, err
-			}
-			return b, numRead + 1, nil
+			iRes, err = pr.ReadUint8()
 		case type_uint16:
-			var result uint16
-			err := pr.ReadBinary(&result)
-			if err != nil {
-				return nil, numRead + 2, err
-			}
-			return result, numRead + 2, nil
+            iRes, err = pr.ReadUint16()
 		case type_uint32:
-			var result uint32
-			err := pr.ReadBinary(&result)
-			if err != nil {
-				return nil, numRead + 4, err
-			}
-			return result, numRead + 4, nil
+            iRes, err = pr.ReadUint32()
 		case type_uint64:
-			var result uint64
-			err := pr.ReadBinary(&result)
-			if err != nil {
-				return nil, numRead + 8, err
-			}
-			return result, numRead + 8, nil
+            iRes, err = pr.ReadUint64()
 		case type_int16:
-			var result int16
-			err := pr.ReadBinary(&result)
-			if err != nil {
-				return nil, numRead + 2, err
-			}
-			return result, numRead + 2, nil
+            iRes, err = pr.ReadInt16()
 		case type_int32:
-			var result int32
-			err := pr.ReadBinary(&result)
-			if err != nil {
-				return nil, numRead + 4, err
-			}
-			return result, numRead + 4, nil
+            iRes, err = pr.ReadInt32();
 		case type_int64:
-			var result int64
-			err := pr.ReadBinary(&result)
-			if err != nil {
-				return nil, numRead + 8, err
-			}
-			return result, numRead + 8, nil
+            iRes, err = pr.ReadInt64();
 		case type_float:
-			var result float32
-			err := pr.ReadBinary(&result)
-			if err != nil {
-				return nil, numRead + 4, err
-			}
-			return result, numRead + 4, nil
+            iRes, err = pr.ReadFloat32();
 		case type_double:
-			var result float64
-			err := pr.ReadBinary(&result)
-			if err != nil {
-				return nil, numRead + 8, err
-			}
-			return result, numRead + 8, nil
+            iRes, err = pr.ReadFloat64();
 		case type_raw16:
 			var length uint16
-			err := pr.ReadBinary(&length)
-			numRead += 2
-			if err != nil {
-				return nil, numRead, err
-			}
-			return pr.unpackRaw(uint32(length), numRead)
+            length, err = pr.ReadUint16();
+			if err == nil {
+			    iRes, err = pr.unpackRaw(uint32(length));
+            }
 		case type_raw32:
 			var length uint32
-			err := pr.ReadBinary(&length)
-			numRead += 4
-			if err != nil {
-				return nil, numRead, err
-			}
-			return pr.unpackRaw(length, numRead)
+            length, err = pr.ReadUint32()
+			if err == nil {
+			    iRes, err = pr.unpackRaw(length)
+            }
 		case type_array16:
 			var length uint16
-			err := pr.ReadBinary(&length)
-			numRead += 2
-			if err != nil {
-				return nil, numRead, err
-			}
-			return pr.unpackArray(uint32(length), numRead)
+			length, err := pr.ReadUint16();
+			if err == nil {
+			    iRes, err = pr.unpackArray(uint32(length));
+            }
 		case type_array32:
 			var length uint32
-			err := pr.ReadBinary(&length)
-			numRead += 2
-			if err != nil {
-				return nil, numRead, err
-			}
-			return pr.unpackArray(length, numRead)
+            length, err = pr.ReadUint32();
+			if err == nil {
+			    iRes, err= pr.unpackArray(length);
+            }
 		case type_map16:
 			var length uint16
-			err := pr.ReadBinary(&length)
-			numRead += 2
-			if err != nil {
-				return nil, numRead, err
-			}
-			return pr.unpackMap(uint32(length), numRead)
+			length, err = pr.ReadUint16();
+			if err == nil {
+			    iRes, err = pr.unpackMap(uint32(length));
+            }
 		case type_map32:
 			var length uint32
-			err := pr.ReadBinary(&length)
-			numRead += 4
-			if err != nil {
-				return nil, numRead, err
-			}
-			return pr.unpackMap(length, numRead)
+			length, err = pr.ReadUint32();
+			if err == nil {
+			    iRes, err = pr.unpackMap(length)
+            }
 		default:
 			fmt.Printf("unhandled type prefix: %x\n", b)
 		}
-		return b, numRead, nil
 	}
+
+    end := pr.offset;
+    numRead := int(start - end);
 
     if pr.framed && err == nil && numRead != frame {
         fmt.Printf ("bad frame value: %d v %d", numRead, frame);
