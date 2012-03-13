@@ -118,18 +118,6 @@ func (sc *ServerConn) sendResults() {
 }
 
 func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
-    defer func() {
-        if err := recover(); err != nil {
-            log.Println("processRPC failed", err)
-            debug.PrintStack()
-            response, e := errorResponse(0, err.(error).Error())
-            if e == nil {
-                results <- response
-            } else {
-                log.Printf("error making error response: %s", e)
-            }
-        }
-    }()
 
     startTime := time.Now()
 
@@ -159,10 +147,10 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
     var out []byte
 
     if e == nil {
-        out, e = successResponse (msgid, res.GetData())
+        out, e = successResponse (msgid, res.GetData(), srv.framed)
     }
     if e != nil {
-        out = errorResponse (msgid,  e.Error())
+        out = errorResponse (msgid, e.Error(), srv.framed)
     }
     results <- out
 
@@ -170,16 +158,16 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
         (float64)(time.Now().Sub(startTime))/1e6)
 }
 
-func errorResponse(msgid uint32, message string) ([]byte, error) {
+func errorResponse(msgid uint32, message string, framed bool) ([]byte, error) {
     response := makeResponse(msgid)
     response[2] = message
-    return packMessage(response)
+    return packMessage(response, framed)
 }
 
-func successResponse(msgid uint32, result interface{}) ([]byte, error) {
+func successResponse(msgid uint32, result interface{}, framed bool) ([]byte, error) {
     response := makeResponse(msgid)
     response[3] = result
-    return packMessage(response)
+    return packMessage(response, framed)
 }
 
 func makeResponse(msgid uint32) []interface{} {
@@ -191,9 +179,9 @@ func makeResponse(msgid uint32) []interface{} {
     return response
 }
 
-func packMessage(message interface{}) ([]byte, error) {
+func packMessage(message interface{}, framed bool) ([]byte, error) {
     b := new(bytes.Buffer)
-    _, err := Pack(b, message)
+    _, err := Pack(b, message, framed)
     if err != nil {
         return nil, err
     }
@@ -295,7 +283,7 @@ func (client *RPCClient) Call(procedure string, params interface{}, output chan 
     request[1] = msgid
     request[2] = procedure
     request[3] = args
-    msg, err := packMessage(request)
+    msg, err := packMessage(request, client.Framed)
     if err != nil {
         log.Printf("Error packing message: %s", err)
         return err

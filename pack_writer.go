@@ -12,22 +12,38 @@ import (
 
 type PackWriter struct {
     writer io.Writer
-    sink io.Writer
+    sink *io.Writer
     buffer *bytes.Buffer
     offset uint64
     framed bool
 }
 
+const (
+    packed_uint32_len = 5
+    )
+
 func NewPackWriter(writer io.Writer, framed bool) *PackWriter {
     result := new(PackWriter)
-    if framed {
-        result.buffer = bytes.NewBuffer(make([]bytes, 0, 4196));
-        result.writer = *result.buffer
-        result.sink = writer
-    } else {
+    if !framed {
         result.writer = writer
         result.sink = writer
+    } else {
+
+        // If they passed us a Buffer, then just reuse that buffer
+        buffer, ok := writer.(*bytes.Buffer)
+        
+        if !ok {
+            // Otherwise, we need to write to a buffer, and then flush
+            buffer = bytes.NewBuffer(make([]bytes, 0, 4196));
+            result.sink = writer
+        }  
+        result.buffer = buffer
+        result.writer = *buffer
+        
+        // Make room for up to 5 bytes of data
+        buffer.Write(make([]bytes, packed_uint32_len))
     }
+    result.offset = 0
     result.framed = framed
     return result
 }
@@ -264,15 +280,40 @@ func (pw PackWriter) pack(value interface{}) (e error) {
 func (pw PackWriter) flush() (n int, e error) {
 
     if pw.framed {
-        raw := pw.buffer.Bytes()
-        l := len(raw)
-        pw.writer = pw.sink
-        pw.offset = 0
 
-        e = pw.packPositiveInt(int64(l))
+        nbytes := pw.offset
+        tmp := bytes.NewBuffer(make([]bytes,0,packed_uint32_len));
+        pw.writer = tmp
+        pw.offset = 0
+        e = pw.packUint(nbytes)
+        
         if e == nil {
-            e = pw.packRaw(raw)
-        }
+            frame_len := int(pw.offset)
+
+            // We had allocated up to 5 bytes, but we only needed frame_len
+            // bytes.  In this case, we're going to have to offset into the
+            // beginning of the buffer by offset many bytes
+            offset := packed_uint32_len - frame_len
+
+            // Advance the pointer in the buffer that many bytes (offset)
+            // This is the best way I found to throw away offset number of bytes
+            pw.buffer.ReadBytes(make([]bytes,offset));
+
+            // Copy the prefix over...
+            for i := 0; i < frame_len; i ++ {
+                pw.buffer.Bytes()[i] = tmp.Bytes()[i]
+            }
+
+            // Reset the offset to be the number of bytes read
+            pw.offset = nbytes + frame_len
+
+            // If there's a sink that we need to flush to, do that now.
+            // Otherwise, we're ok where we were, since the writer and
+            // the buffer were one in the same
+            if pw.sink {
+                pw.sink.Write(pw.buffer.Bytes())
+            }
+        } 
     }
     n = pw.offset
 

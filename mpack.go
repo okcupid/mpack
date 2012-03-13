@@ -6,9 +6,9 @@ import (
     "io"
     )
 
-func Pack(w io.Writer, value interface{}) (n int, e error) {
+func Pack(w io.Writer, value interface{}, framed bool) (n int, e error) {
     //	stime := time.Nanoseconds()
-    pw := NewPackWriter(w)
+    pw := NewPackWriter(w, framed)
     e = pw.pack(value)
 
     if e == nil {
