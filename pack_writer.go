@@ -47,18 +47,20 @@ func NewPackWriter(writer io.Writer, framed bool) *PackWriter {
     return result
 }
 
-func (pr PackWriter) incOffset(i int) { pr.offset += i }
+func (pr *PackWriter) incOffset(i int) { 
+    pr.offset += i 
+}
 
 
 func (pr PackWriter) expectFraming() bool {
     return pr.framed && pr.offset == 0
 }
 
-func (pw PackWriter) packByte(b byte) error {
+func (pw *PackWriter) packByte(b byte) error {
     return pw.packBinary(b);
 }
 
-func (pw PackWriter) packPositiveInt(u uint64) (e error) {
+func (pw *PackWriter) packPositiveInt(u uint64) (e error) {
     if u <= 0x7f {
         e = pw.packByte(byte(u))
     } else if u <= 0xff {
@@ -77,7 +79,7 @@ func (pw PackWriter) packPositiveInt(u uint64) (e error) {
     return
 }
 
-func (pw PackWriter) packNegativeInt(i int64) (e error) {
+func (pw *PackWriter) packNegativeInt(i int64) (e error) {
     if i >= -32 {
         e = pw.packByte(byte(i));
     } else if i >= -128 {
@@ -101,7 +103,7 @@ func (pw PackWriter) packNegativeInt(i int64) (e error) {
 // If it's a medium length, pack out the medium 16-bit prefix 'm'.
 // If it's a big length, pack out the big prefix 'b'
 //
-func (pw PackWriter) packLen(l int, s uint8, m uint8, b uint8) (e error) {
+func (pw *PackWriter) packLen(l int, s uint8, m uint8, b uint8) (e error) {
     if l <= 0x1f {
         l |= int(s)
         e = pw.packByte (byte(l))
@@ -115,15 +117,16 @@ func (pw PackWriter) packLen(l int, s uint8, m uint8, b uint8) (e error) {
     return e
 }
 
-func (pw PackWriter) packBinary(v interface{}) error {
+func (pw *PackWriter) packBinary(v interface{}) error {
     e := binary.Write(pw.writer, binary.BigEndian, v)
-    if e != nil {
-        pw.incOffset (binary.Size(v));
+    if e == nil {
+        n := binary.Size(v)
+        pw.incOffset (n);
     }
     return e;
 }
 
-func (pw PackWriter) packRaw(b []byte) error {
+func (pw *PackWriter) packRaw(b []byte) error {
     n,e := pw.writer.Write(b)
     if e != nil {
         pw.incOffset (n);
@@ -132,7 +135,7 @@ func (pw PackWriter) packRaw(b []byte) error {
 }
 
 
-func (pw PackWriter) packInt (i int64) (e error) {
+func (pw *PackWriter) packInt (i int64) (e error) {
     if (i >= 0) {
         e = pw.packPositiveInt(uint64(i))
     } else {
@@ -141,16 +144,16 @@ func (pw PackWriter) packInt (i int64) (e error) {
     return
 }
 
-func (pw PackWriter) packUint (u uint64) error {
+func (pw *PackWriter) packUint (u uint64) error {
     e := pw.packPositiveInt(u)
     return e
 }
 
-func (pw PackWriter) packNil() error {
+func (pw *PackWriter) packNil() error {
     return pw.packByte(byte(type_nil))
 }
 
-func (pw PackWriter) packBool(v bool) error {
+func (pw *PackWriter) packBool(v bool) error {
     b := type_true
     if v == false {
         b = type_false
@@ -158,30 +161,30 @@ func (pw PackWriter) packBool(v bool) error {
     return pw.packByte(b)
 }
 
-func (pw PackWriter) packFloat32(n float32) error {
+func (pw *PackWriter) packFloat32(n float32) error {
     pw.packByte(type_float)
     e := pw.packBinary(n)
     return e
 }
 
-func (pw PackWriter) packFloat64(n float64) error {
+func (pw *PackWriter) packFloat64(n float64) error {
     pw.packByte(type_double)
     e := pw.packBinary(n)
     return e
 }
 
-func (pw PackWriter) packBytes(b []byte) error {
+func (pw *PackWriter) packBytes(b []byte) error {
     l := len(b)
     pw.packLen(l, type_fix_raw, type_raw16, type_raw32)
     e := pw.packRaw(b)
     return e
 }
 
-func (pw PackWriter) packString(s string) error {
+func (pw *PackWriter) packString(s string) error {
     return pw.packBytes([]byte(s))
 }
 
-func (pw PackWriter) packArray(a reflect.Value) error {
+func (pw *PackWriter) packArray(a reflect.Value) error {
     e := pw.packLen(a.Len(), type_fix_array_min, type_array16, type_array32)
 
     for i := 0; e == nil && i < a.Len(); i++ {
@@ -191,7 +194,7 @@ func (pw PackWriter) packArray(a reflect.Value) error {
     return e
 }
 
-func (pw PackWriter) packMap(m reflect.Value) error {
+func (pw *PackWriter) packMap(m reflect.Value) error {
     e := pw.packLen(m.Len(), type_fix_map_min, type_map16, type_map32)
 
     keys := m.MapKeys()
@@ -204,7 +207,7 @@ func (pw PackWriter) packMap(m reflect.Value) error {
     return e
 }
 
-func (pw PackWriter) pack(value interface{}) (e error) {
+func (pw *PackWriter) pack(value interface{}) (e error) {
 
     var packed bool = false
     if value == nil {
@@ -273,7 +276,7 @@ func (pw PackWriter) pack(value interface{}) (e error) {
     return e
 }
 
-func (pw PackWriter) flush() (n int, e error) {
+func (pw *PackWriter) flush() (n int, e error) {
 
     if pw.framed {
 

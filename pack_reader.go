@@ -22,7 +22,7 @@ type PackReader struct {
     offset uint64 
 }
 
-func (pr PackReader) expectFraming() bool {
+func (pr *PackReader) expectFraming() bool {
     return pr.framed && pr.offset == 0
 }
 
@@ -34,7 +34,7 @@ func NewPackReader(r io.Reader, f bool) *PackReader {
     return result
 }
 
-func (pr PackReader) incOffset (i int) {
+func (pr *PackReader) incOffset (i int) {
     pr.offset += uint64(i);
 }
 
@@ -46,18 +46,18 @@ func (pr PackReader) ReadBinary(result interface{}) error {
     return e
 }
 
-func (pr PackReader) ReadUint8() (tmp uint8, e error)   { e = pr.ReadBinary(&tmp); return }
-func (pr PackReader) ReadUint32() (tmp uint32, e error) { e = pr.ReadBinary(&tmp); return }
-func (pr PackReader) ReadUint16() (tmp uint16, e error) { e = pr.ReadBinary(&tmp); return }
-func (pr PackReader) ReadUint64() (tmp uint64, e error) { e = pr.ReadBinary(&tmp); return }
-func (pr PackReader) ReadInt16() (tmp int16, e error)   { e = pr.ReadBinary(&tmp); return }
-func (pr PackReader) ReadInt32() (tmp int32, e error)   { e = pr.ReadBinary(&tmp); return }
-func (pr PackReader) ReadInt64() (tmp uint64, e error)  { e = pr.ReadBinary(&tmp); return }
+func (pr *PackReader) ReadUint8() (tmp uint8, e error)   { e = pr.ReadBinary(&tmp); return }
+func (pr *PackReader) ReadUint32() (tmp uint32, e error) { e = pr.ReadBinary(&tmp); return }
+func (pr *PackReader) ReadUint16() (tmp uint16, e error) { e = pr.ReadBinary(&tmp); return }
+func (pr *PackReader) ReadUint64() (tmp uint64, e error) { e = pr.ReadBinary(&tmp); return }
+func (pr *PackReader) ReadInt16() (tmp int16, e error)   { e = pr.ReadBinary(&tmp); return }
+func (pr *PackReader) ReadInt32() (tmp int32, e error)   { e = pr.ReadBinary(&tmp); return }
+func (pr *PackReader) ReadInt64() (tmp uint64, e error)  { e = pr.ReadBinary(&tmp); return }
 
-func (pr PackReader) ReadFloat32() (tmp float32, e error)  { e = pr.ReadBinary(&tmp); return }
-func (pr PackReader) ReadFloat64() (tmp float64, e error)  { e = pr.ReadBinary(&tmp); return }
+func (pr *PackReader) ReadFloat32() (tmp float32, e error)  { e = pr.ReadBinary(&tmp); return }
+func (pr *PackReader) ReadFloat64() (tmp float64, e error)  { e = pr.ReadBinary(&tmp); return }
 
-func (pr PackReader) unpackRaw(length uint32) (res []byte, e error) {
+func (pr *PackReader) unpackRaw(length uint32) (res []byte, e error) {
 
     e = nil
     res = nil
@@ -74,7 +74,7 @@ func (pr PackReader) unpackRaw(length uint32) (res []byte, e error) {
     return 
 }
 
-func (pr PackReader) unpackArray(length uint32) (res []interface{}, e error) {
+func (pr *PackReader) unpackArray(length uint32) (res []interface{}, e error) {
 
     res = nil
     e = nil
@@ -90,7 +90,7 @@ func (pr PackReader) unpackArray(length uint32) (res []interface{}, e error) {
     return
 }
 
-func (pr PackReader) unpackMap(length uint32) (res map[interface{}]interface{}, err error) {
+func (pr *PackReader) unpackMap(length uint32) (res map[interface{}]interface{}, err error) {
 
     res = make(map[interface{}]interface{})
     err = nil
@@ -115,7 +115,7 @@ func (pr PackReader) unpackMap(length uint32) (res map[interface{}]interface{}, 
     return res, err
 }
 
-func (pr PackReader) unpack() (interface{}, int, error) {
+func (pr *PackReader) unpack() (interface{}, int, error) {
 
     frame := 0;
     var b uint8;
