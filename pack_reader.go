@@ -19,7 +19,7 @@ import (
 type PackReader struct {
     reader io.Reader
     framed bool
-    offset uint64 
+    offset int
 }
 
 func (pr *PackReader) expectFraming() bool {
@@ -35,14 +35,16 @@ func NewPackReader(r io.Reader, f bool) *PackReader {
 }
 
 func (pr *PackReader) incOffset (i int) {
-    pr.offset += uint64(i);
+    pr.offset += i
 }
 
-func (pr PackReader) ReadBinary(result interface{}) error {
+func (pr *PackReader) ReadBinary(result interface{}) error {
     e := binary.Read(pr.reader, binary.BigEndian, result)
+    fmt.Printf("before: %d\n", pr.offset);
     if e == nil {
         pr.incOffset (binary.Size(result));
     }
+    fmt.Printf("after: %d\n", pr.offset);
     return e
 }
 
@@ -120,7 +122,6 @@ func (pr *PackReader) unpack() (interface{}, int, error) {
     frame := 0;
     var b uint8;
     var err error = nil;
-    var start uint64 = pr.offset;
 
     var iRes interface{} = nil;
 
@@ -136,13 +137,14 @@ func (pr *PackReader) unpack() (interface{}, int, error) {
         }
     }
 
-    if err != nil {
+    if err == nil {
         b, err = pr.ReadUint8()
+        fmt.Printf("AZZ %d\n", int (b));
     }
 
     doswitch := false
 
-    if err != nil {
+    if err == nil {
 
         if b < positive_fix_max {
             iRes = b
@@ -230,8 +232,7 @@ func (pr *PackReader) unpack() (interface{}, int, error) {
         }
     }
 
-    end := pr.offset;
-    numRead := int(start - end);
+    numRead := pr.offset;
 
     if framed && err == nil && numRead != frame {
         fmt.Printf ("bad frame value: %d v %d", numRead, frame);
