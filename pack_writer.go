@@ -6,13 +6,14 @@ import (
     "fmt"
     "io"
     "reflect"
-    "buffer"
+    "bytes"
     )
 
 
 type PackWriter struct {
     writer io.Writer
     sink io.Writer
+    buffer *bytes.Buffer
     offset uint64
     framed bool
 }
@@ -20,7 +21,8 @@ type PackWriter struct {
 func NewPackWriter(writer io.Writer, framed bool) *PackWriter {
     result := new(PackWriter)
     if framed {
-        result.writer = *buffer.NewBuffer(make([]bytes, 0, 4196));
+        result.buffer = bytes.NewBuffer(make([]bytes, 0, 4196));
+        result.writer = *result.buffer
         result.sink = writer
     } else {
         result.writer = writer
@@ -33,66 +35,12 @@ func NewPackWriter(writer io.Writer, framed bool) *PackWriter {
 func (pr PackWriter) incOffset(i int) { pr.offset += uint64(i) }
 
 
-
 func (pr PackWriter) expectFraming() bool {
     return pr.framed && pr.offset == 0
 }
 
-func (pw PackWriter) writeCode(code byte) (int, error) {
-    return pw.writer.Write([]byte{code})
-}
-
-func (pw PackWriter) writeByte(b byte) (int, error) {
-    return pw.writer.Write([]byte{b})
-}
-
-func (pw PackWriter) writeBinary(n interface{}) error {
-    return binary.Write(pw.writer, binary.BigEndian, n)
-}
-
-func (pw PackWriter) writeBlock(code byte, n interface{}, bytes int) (int, error) {
-    total, err := pw.writeCode(code)
-    if err != nil {
-        return 0, err
-    }
-    err = pw.writeBinary(n)
-    if err != nil {
-        return total, err
-    }
-    total += bytes
-    return total, nil
-}
-
-func (pw PackWriter) packUint8(n uint8) (int, error) {
-    if n < 128 {
-        return pw.writeByte(n)
-    }
-    return pw.writer.Write([]byte{type_uint8, byte(n)})
-}
-
-func (pw PackWriter) packByte(n byte) (int, error) {
-    return pw.packUint8(n)
-}
-
-func (pw PackWriter) packUint16(n uint16) (int, error) {
-    if n < 0x100 {
-        return pw.packUint8(uint8(n))
-    }
-    return pw.writeBlock(type_uint16, n, 2)
-}
-
-func (pw PackWriter) packUint32(n uint32) (int, error) {
-    if n < 65536 {
-        return pw.packUint16(uint16(n))
-    }
-    return pw.writeBlock(type_uint32, n, 4)
-}
-
-func (pw PackWriter) packUint64(n uint64) (int, error) {
-    if n < 4294967296 {
-        return pw.packUint32(uint32(n))
-    }
-    return pw.writeBlock(type_uint64, n, 8)
+func (pw PackWriter) packByte(b byte) error {
+    return pw.packBinary(b);
 }
 
 func (pw PackWriter) packPositiveInt(u uint64) (e error) {
@@ -135,8 +83,9 @@ func (pw PackWriter) packNegativeInt(i int64) (e error) {
 
 //
 // Pack a length. If it's a small length, OR in the 's' mask.
-// If it's a medium length, pack out the short prefix 's'.
-// If it's a long length, pack out the big prefix 'b'
+// If it's a medium length, pack out the medium 16-bit prefix 'm'.
+// If it's a big length, pack out the big prefix 'b'
+//
 func (pw PackWriter) packLen(l int, s uint8, m uint8, b uint8) (e error) {
     if l <= 0x1f {
         l |= int(s)
@@ -159,30 +108,31 @@ func (pw PackWriter) packBinary(v interface{}) error {
     return e;
 }
 
-
-func (pw PackWriter) packInt16(n int16) (int, error) {
-    if n >= -128 && n <= 127 {
-        return pw.packInt8(int8(n))
+func (pw PackWriter) packRaw(b []bytes) error {
+    n,e := pr.writer.Write(b)
+    if e != nil {
+        pr.incOffset (n);
     }
-    return pw.writeBlock(type_int16, n, 2)
+    return e
 }
 
-func (pw PackWriter) packInt32(n int32) (int, error) {
-    if n >= -32768 && n <= 32767 {
-        return pw.packInt16(int16(n))
+
+func (pw PackWriter) packInt (i int64) (e error) {
+    if (i >= 0) {
+        e = pw.packPositiveInt(i)
+    } else {
+        e = pw.packNegativeInt(i)
     }
-    return pw.writeBlock(type_int32, n, 4)
+    return
 }
 
-func (pw PackWriter) packInt64(n int64) (int, error) {
-    if n >= -2147483648 && n <= 2147483647 {
-        return pw.packInt32(int32(n))
-    }
-    return pw.writeBlock(type_int64, n, 8)
+func (pw PackWriter) packUint (u uint64) error {
+    e := pw.packPositiveInt(u)
+    return
 }
 
-func (pw PackWriter) packNil() (int, error) {
-    return pw.writeCode(type_nil)
+func (pw PackWriter) packNil() error {
+    return pw.packByte(byte(type_nil))
 }
 
 func (pw PackWriter) packBool(v bool) (int, error) {
@@ -190,180 +140,53 @@ func (pw PackWriter) packBool(v bool) (int, error) {
     if v == false {
         b = type_false
     }
-    return pw.writeByte(b)
+    return pw.packByte(b)
 }
 
-func (pw PackWriter) packFloat32(n float32) (int, error) {
-    return pw.writeBlock(type_float, n, 4)
+func (pw PackWriter) packFloat32(n float32) error {
+    pw.packByte(type_float)
+    e := pw.packBinary(n)
+    return e
 }
 
-func (pw PackWriter) packFloat64(n float64) (int, error) {
-    return pw.writeBlock(type_double, n, 8)
+func (pw PackWriter) packFloat64(n float64) error {
+    pw.packByte(type_double)
+    e := pw.packBinary(n)
+    return e
 }
 
-func (pw PackWriter) packBytes(b []byte) (int, error) {
-    if len(b) < 32 {
-        pw.writeByte(type_fix_raw | uint8(len(b)))
-        pw.writer.Write(b)
-        return 1 + len(b), nil
-    } else if len(b) < 65536 {
-        pw.writeCode(type_raw16)
-        var length uint16 = uint16(len(b))
-        pw.writeBinary(length)
-        pw.writer.Write(b)
-        return 3 + len(b), nil
-    } else if uint32(len(b)) <= uint32(4294967295) {
-        pw.writeCode(type_raw32)
-        length := uint32(len(b))
-        pw.writeBinary(length)
-        pw.writer.Write(b)
-        return 5 + len(b), nil
-    }
-    return 0, nil
+func (pw PackWriter) packBytes(b []byte) error {
+    l := len(b)
+    pw.packLen(l, type_fix_raw, type_raw16, type_raw32)
+    e := pw.packRaw(b)
+    return e
 }
 
-func (pw PackWriter) packString(s string) (int, error) {
+func (pw PackWriter) packString(s string) error {
     return pw.packBytes([]byte(s))
 }
 
-func (pw PackWriter) packInt64Array(a []int64) (int, error) {
-    numBytes := 0
-    if len(a) < 16 {
-        n, err := pw.writeCode(type_fix_array_min | uint8(len(a)))
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
-    } else if len(a) < 65536 {
-        n, err := pw.writeCode(type_array16)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
-        length := uint16(len(a))
-        err = pw.writeBinary(length)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += 2
-    } else if uint32(len(a)) <= uint32(4294967295) {
-        n, err := pw.writeCode(type_array32)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
-        length := uint32(len(a))
-        err = pw.writeBinary(length)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += 4
-    }
+func (pw PackWriter) packArray(a reflect.Value) error {
+    e := pw.packLen(a.Len(), type_fix_array_min, type_array16, type_array32)
 
-    for i := 0; i < len(a); i++ {
-        n, err := pw.packInt64(a[i])
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
-    }
-    return numBytes, nil
-}
-
-func (pw PackWriter) packArray(a reflect.Value) (int, error) {
-    numBytes := 0
-    if a.Len() < 16 {
-        n, err := pw.writeCode(type_fix_array_min | uint8(a.Len()))
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
-    } else if a.Len() < 65536 {
-        n, err := pw.writeCode(type_array16)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
-        length := uint16(a.Len())
-        err = pw.writeBinary(length)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += 2
-    } else if uint32(a.Len()) <= uint32(4294967295) {
-        n, err := pw.writeCode(type_array32)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
-        length := uint32(a.Len())
-        err = pw.writeBinary(length)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += 4
-    }
-    for i := 0; i < a.Len(); i++ {
+    for i := 0; e == nil && i < a.Len(); i++ {
         elt := a.Index(i)
-        n, err := pw.pack(elt.Interface())
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
+        e = pw.pack(elt.Interface())
     }
-    return numBytes, nil
+    return 
 }
 
-func (pw PackWriter) packMap(m reflect.Value) (int, error) {
-    numBytes := 0
-
-    if m.Len() < 16 {
-        n, err := pw.writeCode(type_fix_map_min | uint8(m.Len()))
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
-    } else if m.Len() < 65536 {
-        n, err := pw.writeCode(type_map16)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
-        length := uint16(m.Len())
-        err = pw.writeBinary(length)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += 2
-    } else if uint32(m.Len()) <= uint32(4294967295) {
-        n, err := pw.writeCode(type_map32)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
-        length := uint32(m.Len())
-        err = pw.writeBinary(length)
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += 4
-    }
+func (pw PackWriter) packMap(m reflect.Value) error {
+    e := pw.packLen(a.Len(), type_fix_map_min, type_map16, type_map32)
 
     keys := m.MapKeys()
-    for i := 0; i < len(keys); i++ {
-        n, err := pw.pack(keys[i].Interface())
-        if err != nil {
-            return numBytes, err
+    for i := 0; e == nil && i < len(keys); i++ {
+        e = pw.pack(keys[i].Interface())
+        if e == nil {
+            e = pw.pack(m.MapIndex(keys[i]).Interface())
         }
-        numBytes += n
-        n, err = pw.pack(m.MapIndex(keys[i]).Interface())
-        if err != nil {
-            return numBytes, err
-        }
-        numBytes += n
     }
-
-    return numBytes, nil
+    return
 }
 
 func (pw PackWriter) pack(value interface{}) (e error) {
@@ -377,36 +200,38 @@ func (pw PackWriter) pack(value interface{}) (e error) {
     if !packed {
         packed = true
         switch tvalue := value.(type) {
+
         case int8:
-            e = pw.packInt8(tvalue)
+            e = pw.packInt(int64(tvalue))
         case int16:
-            e = pw.packInt16(tvalue)
+            e = pw.packInt(int64(tvalue))
         case int32:
-            e  = pw.packInt32(tvalue)
+            e  = pw.packInt(int64(tvalue))
         case int64:
-            e = pw.packInt64(tvalue)
+            e = pw.packInt(int64(tvalue))
         case int:
-            e = pw.packInt64(int64(tvalue))
+            e = pw.packInt(int64(tvalue))
+
         case uint8:
-            e = pw.packUint8(tvalue)
+            e = pw.packUint(uint64(tvalue))
         case uint16:
-            e = pw.packUint16(tvalue)
+            e = pw.packUint(uint64(tvalue))
         case uint32:
-            e = pw.packUint32(tvalue)
+            e = pw.packUint(uint64(tvalue))
         case uint64:
-            e = pw.packUint64(tvalue)
+            e = pw.packUint(uint64(tvalue))
         case uint:
-            e = pw.packUint64(uint64(tvalue))
+            e = pw.packUint(uint64(tvalue))
+
         case bool:
             e = pw.packBool(tvalue)
+
         case float32:
             e = pw.packFloat32(tvalue)
         case float64:
             e = pw.packFloat64(tvalue)
         case []byte:
             e = pw.packBytes(tvalue)
-        case []int64:
-            e = pw.packInt64Array(tvalue)
         case string:
             e = pw.packString(tvalue)
         default:
@@ -434,4 +259,23 @@ func (pw PackWriter) pack(value interface{}) (e error) {
     }
 
     return e
+}
+
+func (pw PackWriter) flush() (n int, e error) {
+
+    if pw.framed {
+        raw := pw.buffer.Bytes()
+        l := len(raw)
+        pw.writer = pw.sink
+        pw.offset = 0
+
+        e = pw.packPositiveInt(int64(l))
+        if e == nil {
+            e = pw.packRaw(raw)
+        }
+    }
+    n = pw.offset
+
+    return
+
 }

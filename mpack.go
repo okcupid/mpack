@@ -1,22 +1,29 @@
+// -*- mode: go; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil; -*-
+
 package mpack
 
 import (
-	"io"
-	)
+    "io"
+    )
 
-func Pack(w io.Writer, value interface{}) (packedBytes int, err error) {
-	//	stime := time.Nanoseconds()
-	pw := NewPackWriter(w)
-	n, e := pw.pack(value)
+func Pack(w io.Writer, value interface{}) (n int, e error) {
+    //	stime := time.Nanoseconds()
+    pw := NewPackWriter(w)
+    e = pw.pack(value)
 
-	//	etime := time.Nanoseconds()
-	//	msecs := (float64)(etime-stime) / 1000000
-	//	fmt.Printf("pack time: %.3fms\n", msecs)
+    if e == nil {
+        n,e = pw.flush()
+    }
 
-	return n, e
+
+    //	etime := time.Nanoseconds()
+    //	msecs := (float64)(etime-stime) / 1000000
+    //	fmt.Printf("pack time: %.3fms\n", msecs)
+
+    return
 }
 
 func Unpack(reader io.Reader, framed bool) (interface{}, int, error) {
-	pr := NewPackReader(reader, framed)
-	return pr.unpack()
+    pr := NewPackReader(reader, framed)
+    return pr.unpack()
 }
