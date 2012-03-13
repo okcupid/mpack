@@ -130,7 +130,10 @@ func TestPackUnpackFloat64(t *testing.T) {
 
 func TestPackUnpackByteArray(t *testing.T) {
     b := new(bytes.Buffer)
-    MyPack(b, []byte{0x34, 0x56, 0x78, 0x90})
+    n, err := MyPack(b, []byte{0x34, 0x56, 0x78, 0x90})
+    if n != 5 || b.Len() != 5 {
+        t.Fatalf("expected pack to make 5 bytes, not %d/%d (%s)\n", n, b.Len(), b);
+    }
     x, n, err := MyUnpack(b)
     if err != nil {
         t.Fatal(err)

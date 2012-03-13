@@ -128,7 +128,7 @@ func (pw *PackWriter) packBinary(v interface{}) error {
 
 func (pw *PackWriter) packRaw(b []byte) error {
     n,e := pw.writer.Write(b)
-    if e != nil {
+    if e == nil {
         pw.incOffset (n);
     }
     return e

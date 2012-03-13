@@ -59,8 +59,9 @@ func (pr *PackReader) unpackRaw(length uint32) (res []byte, e error) {
     if length > 0 {
         res = make([]byte, length)
         n, e = pr.reader.Read(res)
-        if e != nil {
+        if e == nil {
             pr.incOffset(n);
+        } else {
             res = nil
         }
     }
