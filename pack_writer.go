@@ -2,8 +2,8 @@
 
 package mpack
 import (
+    "errors"
     "encoding/binary"
-    "fmt"
     "io"
     "reflect"
     "bytes"
@@ -12,9 +12,9 @@ import (
 
 type PackWriter struct {
     writer io.Writer
-    sink *io.Writer
+    sink io.Writer
     buffer *bytes.Buffer
-    offset uint64
+    offset int
     framed bool
 }
 
@@ -26,7 +26,6 @@ func NewPackWriter(writer io.Writer, framed bool) *PackWriter {
     result := new(PackWriter)
     if !framed {
         result.writer = writer
-        result.sink = writer
     } else {
 
         // If they passed us a Buffer, then just reuse that buffer
@@ -34,21 +33,21 @@ func NewPackWriter(writer io.Writer, framed bool) *PackWriter {
         
         if !ok {
             // Otherwise, we need to write to a buffer, and then flush
-            buffer = bytes.NewBuffer(make([]bytes, 0, 4196));
+            buffer = bytes.NewBuffer(make([]byte, 0, 4196));
             result.sink = writer
         }  
         result.buffer = buffer
-        result.writer = *buffer
+        result.writer = buffer
         
         // Make room for up to 5 bytes of data
-        buffer.Write(make([]bytes, packed_uint32_len))
+        buffer.Write(make([]byte, packed_uint32_len))
     }
     result.offset = 0
     result.framed = framed
     return result
 }
 
-func (pr PackWriter) incOffset(i int) { pr.offset += uint64(i) }
+func (pr PackWriter) incOffset(i int) { pr.offset += i }
 
 
 func (pr PackWriter) expectFraming() bool {
@@ -61,7 +60,7 @@ func (pw PackWriter) packByte(b byte) error {
 
 func (pw PackWriter) packPositiveInt(u uint64) (e error) {
     if u <= 0x7f {
-        e = pw.packByte(u)
+        e = pw.packByte(byte(u))
     } else if u <= 0xff {
         pw.packByte(byte(type_uint8))
         e = pw.packBinary(uint8(u));
@@ -80,7 +79,7 @@ func (pw PackWriter) packPositiveInt(u uint64) (e error) {
 
 func (pw PackWriter) packNegativeInt(i int64) (e error) {
     if i >= -32 {
-        e = pw.packByte(i);
+        e = pw.packByte(byte(i));
     } else if i >= -128 {
         pw.packByte(type_int8);
         e = pw.packBinary(int8(i))
@@ -105,7 +104,7 @@ func (pw PackWriter) packNegativeInt(i int64) (e error) {
 func (pw PackWriter) packLen(l int, s uint8, m uint8, b uint8) (e error) {
     if l <= 0x1f {
         l |= int(s)
-        e = pw.packByte (l)
+        e = pw.packByte (byte(l))
     } else if l <= 0xffff {
         pw.packByte(m);
         e = pw.packBinary(uint16(l))
@@ -117,17 +116,17 @@ func (pw PackWriter) packLen(l int, s uint8, m uint8, b uint8) (e error) {
 }
 
 func (pw PackWriter) packBinary(v interface{}) error {
-    e := binary.Write(pr.writer, binary.BigEndian, v)
+    e := binary.Write(pw.writer, binary.BigEndian, v)
     if e != nil {
-        pr.incOffset (binary.Size(v));
+        pw.incOffset (binary.Size(v));
     }
     return e;
 }
 
-func (pw PackWriter) packRaw(b []bytes) error {
-    n,e := pr.writer.Write(b)
+func (pw PackWriter) packRaw(b []byte) error {
+    n,e := pw.writer.Write(b)
     if e != nil {
-        pr.incOffset (n);
+        pw.incOffset (n);
     }
     return e
 }
@@ -135,7 +134,7 @@ func (pw PackWriter) packRaw(b []bytes) error {
 
 func (pw PackWriter) packInt (i int64) (e error) {
     if (i >= 0) {
-        e = pw.packPositiveInt(i)
+        e = pw.packPositiveInt(uint64(i))
     } else {
         e = pw.packNegativeInt(i)
     }
@@ -144,14 +143,14 @@ func (pw PackWriter) packInt (i int64) (e error) {
 
 func (pw PackWriter) packUint (u uint64) error {
     e := pw.packPositiveInt(u)
-    return
+    return e
 }
 
 func (pw PackWriter) packNil() error {
     return pw.packByte(byte(type_nil))
 }
 
-func (pw PackWriter) packBool(v bool) (int, error) {
+func (pw PackWriter) packBool(v bool) error {
     b := type_true
     if v == false {
         b = type_false
@@ -189,11 +188,11 @@ func (pw PackWriter) packArray(a reflect.Value) error {
         elt := a.Index(i)
         e = pw.pack(elt.Interface())
     }
-    return 
+    return e
 }
 
 func (pw PackWriter) packMap(m reflect.Value) error {
-    e := pw.packLen(a.Len(), type_fix_map_min, type_map16, type_map32)
+    e := pw.packLen(m.Len(), type_fix_map_min, type_map16, type_map32)
 
     keys := m.MapKeys()
     for i := 0; e == nil && i < len(keys); i++ {
@@ -202,7 +201,7 @@ func (pw PackWriter) packMap(m reflect.Value) error {
             e = pw.pack(m.MapIndex(keys[i]).Interface())
         }
     }
-    return
+    return e
 }
 
 func (pw PackWriter) pack(value interface{}) (e error) {
@@ -257,21 +256,18 @@ func (pw PackWriter) pack(value interface{}) (e error) {
     
     if !packed {
 
-        // see if it is an array...
         rvalue := reflect.ValueOf(value)
         if rvalue.Kind() == reflect.Array || rvalue.Kind() == reflect.Slice {
             e = pw.packArray(rvalue)
             packed = true;
-        }
-        // is it a map?
-        else if rvalue.Kind() == reflect.Map {
+        } else if rvalue.Kind() == reflect.Map {
             e = pw.packMap(rvalue)
             packed = true
         }
     }
 
     if !packed {
-        e = errors.New ("unknown type: %s\n", value)
+        e = errors.New ("unknown type given");
     }
 
     return e
@@ -282,13 +278,13 @@ func (pw PackWriter) flush() (n int, e error) {
     if pw.framed {
 
         nbytes := pw.offset
-        tmp := bytes.NewBuffer(make([]bytes,0,packed_uint32_len));
+        tmp := bytes.NewBuffer(make([]byte,0,packed_uint32_len));
         pw.writer = tmp
         pw.offset = 0
-        e = pw.packUint(nbytes)
+        e = pw.packInt(int64(nbytes))
         
         if e == nil {
-            frame_len := int(pw.offset)
+            frame_len := pw.offset
 
             // We had allocated up to 5 bytes, but we only needed frame_len
             // bytes.  In this case, we're going to have to offset into the
@@ -297,12 +293,10 @@ func (pw PackWriter) flush() (n int, e error) {
 
             // Advance the pointer in the buffer that many bytes (offset)
             // This is the best way I found to throw away offset number of bytes
-            pw.buffer.ReadBytes(make([]bytes,offset));
+            pw.buffer.Next(offset)
 
             // Copy the prefix over...
-            for i := 0; i < frame_len; i ++ {
-                pw.buffer.Bytes()[i] = tmp.Bytes()[i]
-            }
+            copy (tmp.Bytes()[0:frame_len], pw.buffer.Bytes()[0:frame_len]);
 
             // Reset the offset to be the number of bytes read
             pw.offset = nbytes + frame_len
@@ -310,7 +304,7 @@ func (pw PackWriter) flush() (n int, e error) {
             // If there's a sink that we need to flush to, do that now.
             // Otherwise, we're ok where we were, since the writer and
             // the buffer were one in the same
-            if pw.sink {
+            if pw.sink != nil {
                 pw.sink.Write(pw.buffer.Bytes())
             }
         } 

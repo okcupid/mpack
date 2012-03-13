@@ -7,7 +7,6 @@ import (
     "io"
     "log"
     "net"
-    "runtime/debug"
     "sync"
     "time"
 	"github.com/maxtaco/jsonw"
@@ -28,7 +27,7 @@ type ServerConn struct {
 }
 
 type RpcHandler interface {
-    Handle(string, *json.Wrapper) (*json.Wrapper, error)
+    Handle(string, *jsonw.Wrapper) (*jsonw.Wrapper, error)
 }
 
 func NewServerConn (conn net.Conn, framed bool) (sc *ServerConn) {
