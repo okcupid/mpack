@@ -125,6 +125,7 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
     var msgid uint64
     var procedure string
     var args, res *jsonw.Wrapper
+    var resdat interface{}
 
     if prfx, e = rpc.AtIndex(0).GetInt(); e != nil {
         log.Printf("Error reading prefix byte: %s", e)
@@ -139,14 +140,18 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
         e = args.Error()
     } else {
         log.Printf("rpc request: msgid=%d, proc=%s, args=%s", 
-            msgid, procedure, args.GetData ());
+            msgid, procedure, args.GetDataOrNil())
         res, e = srv.handler.Handle (procedure, args);
+    }
+
+    if e == nil {
+        resdat, e = res.GetData()
     }
 
     var out []byte
 
     if e == nil {
-        out, e = successResponse (uint32(msgid), res.GetData(), srv.framed)
+        out, e = successResponse (uint32(msgid), resdat, srv.framed)
     }
     if e != nil {
         out,_ = errorResponse (uint32(msgid), e.Error(), srv.framed)
@@ -187,20 +192,23 @@ func packMessage(message interface{}, framed bool) ([]byte, error) {
     return b.Bytes(), nil
 }
 
-type RPCClient struct {
+type JsonWrapChan chan *jsonw.Wrapper
+
+type Client struct {
     Host           string
     conn           net.Conn
     idCounter      int64
-    outputChannels map[int64]chan interface{}
+    outputChannels map[int64]JsonWrapChan
     Connected      bool
     Framed         bool
 }
 
-func NewRPCClient(host string) (*RPCClient, error) {
-    result := new(RPCClient)
+func NewClient(host string, framed bool) (*Client, error) {
+    result := new(Client)
     result.Host = host
+    result.Framed = framed
 
-    result.outputChannels = make(map[int64]chan interface{})
+    result.outputChannels = make(map[int64]JsonWrapChan);
 
     tcpAddr, err := net.ResolveTCPAddr("tcp", host)
     if err != nil {
@@ -215,74 +223,76 @@ func NewRPCClient(host string) (*RPCClient, error) {
     return result, nil
 }
 
-func (client *RPCClient) StartReader() {
-    for {
-        generic, _, err := Unpack(client.conn, client.Framed)
-        if err != nil {
-            if err == io.EOF {
-                log.Printf("%s: eof", client.Host)
-                log.Printf("any data? %v", generic)
-                client.Connected = false
-                return
-            }
+func (client *Client) StartReader() {
+    gogo := true
 
-            log.Printf("%s: unpack error: %s", client.Host, err)
-            continue
-        }
-        response := NewArray(generic)
-        if response.Item(0) != rpc_response {
-            log.Printf("didn't get rpc_response")
-            continue
-        }
-        if response.Item(2) != nil {
-            log.Printf("error: %s", response.Item(2))
-            continue
-        }
-        output, present := client.outputChannels[response.IntItem(1)]
-        if !present {
-            log.Printf("no output channel found for msgid %d", response.IntItem(1))
-            continue
-        }
-
-        /*
-         log.Printf("buffer: %v", response.BufferItem(3))
-         result, _, err := Unpack(response.BufferItem(3))
-         if err != nil {
-         log.Printf("result unpack error: %s", err)
-         continue
-         }
-
-         log.Printf("unpacked result: %v", result)
-         */
-
-        output <- response.Item(3)
-        delete(client.outputChannels, response.IntItem(1))
+    for ; gogo ; {
+        gogo = client.ReadOne();
     }
+    client.Connected = false
+}
+
+func (cli *Client) ReadOne() bool {
+    generic, _, err := Unpack(cli.conn, cli.Framed)
+    host := cli.Host
+    ret := true
+    
+    if err == io.EOF {
+        log.Printf("%s: EOF", cli)
+        ret = false
+    } else if err != nil {
+        log.Printf("%s: unpack error: %s", host, err)
+    } else if response := jsonw.NewWrapper(generic); response == nil {
+        log.Printf("%s: unexpected JSON failure")
+    } else if p, e := response.AtIndex(0).GetInt(); e != nil {
+        log.Printf("%s: error decoding prefix: %s", host, e);
+    } else if byte(p) != rpc_response {
+        log.Printf("%s: didn't get rpc_response", host)
+    } else if !response.AtIndex(2).IsNil() {
+        s, e := response.AtIndex(2).GetString()
+        if e != nil {
+            s = e.Error();
+        }
+        log.Printf("%s: error: %s", host, s);
+    } else if id, e := response.AtIndex(1).GetInt(); e != nil {
+        log.Printf("%s: no msgid found: %s", host, e)
+    } else if output, present := cli.outputChannels[id]; !present {
+        log.Printf("%s: no output channel found for msgid %d", host, id)
+    } else if reply, e := response.AtIndex(3).GetData(); e != nil {
+        log.Printf("%s: invalid reply sent: %s", host, e);
+    } else {
+        output <- jsonw.NewWrapper(reply)
+        delete(cli.outputChannels, id);
+    }
+    return ret
 }
 
 // XXX let them call this with multiple params and wrap them in an array
-func (client *RPCClient) CallSync(procedure string, params interface{}) (interface{}, error) {
-    ch := make(chan interface{})
-    err := client.Call(procedure, params, ch)
-    if err != nil {
-        return nil, err
+func (client *Client) CallSync(procedure string, params *jsonw.Wrapper) (res *jsonw.Wrapper, err error) {
+    ch := make(JsonWrapChan)
+    err = client.Call(procedure, params, ch)
+    if err == nil {
+        res = <- ch
     }
-    result := <-ch
-    return result, nil
+    return 
 }
 
+
 // XXX let them call this with multiple params and wrap them in an array
-func (client *RPCClient) Call(procedure string, params interface{}, output chan interface{}) error {
+func (client *Client) Call(procedure string, params *jsonw.Wrapper, output JsonWrapChan) error {
+
     msgid := client.idCounter
     client.idCounter += 1
-    args := make([]interface{}, 1)
-    args[0] = params
-    request := make([]interface{}, 4)
-    request[0] = rpc_request
-    request[1] = msgid
-    request[2] = procedure
-    request[3] = args
-    msg, err := packMessage(request, client.Framed)
+
+    request := jsonw.NewArray(4)
+    request.SetIndex(0, jsonw.NewInt (int(rpc_request)));
+    request.SetIndex(1, jsonw.NewInt (int(msgid)));
+    request.SetIndex(2, jsonw.NewString (procedure));
+    args := jsonw.NewArray(1)
+    args.SetIndex(0, params)
+    request.SetIndex(3, args);
+
+    msg, err := packMessage(request.GetDataOrNil(), client.Framed)
     if err != nil {
         log.Printf("Error packing message: %s", err)
         return err
@@ -293,11 +303,11 @@ func (client *RPCClient) Call(procedure string, params interface{}, output chan 
     return nil
 }
 
-func (client *RPCClient) IsConnected() bool {
+func (client *Client) IsConnected() bool {
     return client.Connected
 }
 
-func (client *RPCClient) Close() {
+func (client *Client) Close() {
     client.Connected = false
     client.conn.Close()
 }
@@ -305,19 +315,21 @@ func (client *RPCClient) Close() {
 type ClientPool struct {
     Host    string
     MaxSize int
-    clients []*RPCClient
+    clients []*Client
     lock    *sync.Mutex
+    Framed  bool
 }
 
-func NewClientPool(host string) *ClientPool {
+func NewClientPool(host string, framed bool) *ClientPool {
     result := new(ClientPool)
     result.Host = host
     result.lock = new(sync.Mutex)
     result.MaxSize = 10
+    result.Framed = framed
     return result
 }
 
-func (cp *ClientPool) Get() (*RPCClient, error) {
+func (cp *ClientPool) Get() (*Client, error) {
     cp.lock.Lock()
     defer cp.lock.Unlock()
 
@@ -332,14 +344,14 @@ func (cp *ClientPool) Get() (*RPCClient, error) {
         // XXX could check for stale connections like Pool does...
     }
 
-    result, err := NewRPCClient(cp.Host)
+    result, err := NewClient(cp.Host, cp.Framed)
     if err != nil {
         return nil, err
     }
     return result, nil
 }
 
-func (cp *ClientPool) Put(client *RPCClient) {
+func (cp *ClientPool) Put(client *Client) {
     cp.lock.Lock()
     defer cp.lock.Unlock()
 
