@@ -1,9 +1,8 @@
 package mpack
 
-import "io"
-
-//	"time"
-//	"fmt"
+import (
+	"io"
+	)
 
 func Pack(w io.Writer, value interface{}) (packedBytes int, err error) {
 	//	stime := time.Nanoseconds()

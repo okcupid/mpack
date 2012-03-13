@@ -22,6 +22,10 @@ type PackReader struct {
     offset uint64 
 }
 
+func (pr PackReader) expectFraming() bool {
+    return pr.framed && pr.offset == 0
+}
+
 func NewPackReader(r io.Reader, f bool) *PackReader {
     result := new(PackReader)
     result.reader = r
@@ -120,9 +124,11 @@ func (pr PackReader) unpack() (interface{}, int, error) {
 
     var iRes interface{} = nil;
 
+    var framed bool = pr.expectFraming()
+
     // Threaded implementation won't need to worry, so we can
     // just throw the framing away....
-    if pr.framed {
+    if framed {
         var tmp uint32
         tmp, err = pr.ReadUint32()
         if err == nil {
@@ -227,7 +233,7 @@ func (pr PackReader) unpack() (interface{}, int, error) {
     end := pr.offset;
     numRead := int(start - end);
 
-    if pr.framed && err == nil && numRead != frame {
+    if framed && err == nil && numRead != frame {
         fmt.Printf ("bad frame value: %d v %d", numRead, frame);
     }
 

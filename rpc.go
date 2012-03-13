@@ -10,26 +10,13 @@ import (
     "runtime/debug"
     "sync"
     "time"
+	"github.com/maxtaco/jsonw"
 )
-
-// the handler type for rpc calls
-type handler func(arg interface{}) (interface{}, error)
-
-var handlerMap map[string]handler
-
-func init() {
-    handlerMap = make(map[string]handler)
-}
-
-// map a name to a handler function
-func Handle(name string, function handler) error {
-    handlerMap[name] = function
-    return nil
-}
 
 type Server struct {
     host string
     framed bool
+    handler RpcHandler
 }
 
 type ServerConn struct {
@@ -37,6 +24,11 @@ type ServerConn struct {
     framed bool
     results chan []byte
     quit chan bool
+    srv *Server
+}
+
+type RpcHandler interface {
+    Handle(string, *json.Wrapper) (*json.Wrapper, error)
 }
 
 func NewServerConn (conn net.Conn, framed bool) (sc *ServerConn) {
@@ -48,10 +40,11 @@ func NewServerConn (conn net.Conn, framed bool) (sc *ServerConn) {
     return
 }
 
-func NewServer (host string, framed bool) (s *Server) {
+func NewServer (host string, framed bool, h RpcHandler) (s *Server) {
     s = new (Server)
     s.host = host;
     s.framed = framed
+    s.handler = h;
     return
 }
 
@@ -80,7 +73,7 @@ func (srv *Server) ListenAndServe() error {
             if err != nil {
                 log.Printf("accept error: %v", err)
             } else {
-                sc := NewServerConn (conn, srv.framed);
+                sc := NewServerConn (srv, conn)
                 go sc.serve();
             }
         }
@@ -96,11 +89,11 @@ func (sc *ServerConn) serve() {
 
     gogo := false
     for ; gogo; {
-        rpc, _, err := Unpack(sc.conn, sc.framed)
+        rpc, _, err := Unpack(sc.conn, sc.srv.framed)
         if err != nil {
             gogo = true;
         } else {
-            go processRPC(rpc, sc.results)
+            go srv.processRpc (json.NewWrapper(rpc), sc.results)
         }
     }
     sc.quit <- true
@@ -124,7 +117,7 @@ func (sc *ServerConn) sendResults() {
     }
 }
 
-func processRPC(rpc interface{}, results chan []byte) {
+func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
     defer func() {
         if err := recover(); err != nil {
             log.Println("processRPC failed", err)
@@ -137,51 +130,44 @@ func processRPC(rpc interface{}, results chan []byte) {
             }
         }
     }()
+
     startTime := time.Now()
-    args := NewArray(rpc)
-    if args.Item(0) != rpc_request {
+
+    var e error
+    var prfx int64
+    var msgid uint64
+    var procedure string
+    var args, res *jsonw.Wrapper
+
+    if prfx, e = rpc.AtIndex(0).GetInt(); e != nil {
+        log.Printf("Error reading prefix byte: %s", e)
+    } else if prfx != rpc_request {
         log.Printf("did not receive an rpc request")
-        return
+    } else if msgid, e = rpc.AtIndex(1).GetUint (); e != nil {
+        log.Printf("Bad msgid ID received: %s", e);
+    } else if procedure, e = rpc.AtIndex(2).GetString(); e != nil {
+        log.Printf ("Cannot find procedure name: %s", e);
+    } else if args = rpc.AtIndex(3); !args.IsOk() {
+        log.Printf ("No arguments found: %s", args.Error());
+        e = args.Error()
+    } else {
+        log.Printf("rpc request: msgid=%d, proc=%s, args=%s", 
+            msgid, procedure, args.GetData ());
+        res, e = srv.handler.Handle (procedure, args);
     }
 
-    msgid := args.Uint32Item(1)
-    procedure := args.StringItem(2)
-    procedureArgs := args.Item(3)
+    var out []byte
 
-    log.Printf("rpc request: msgid=%d, proc=%s, args=%s", msgid, procedure, procedureArgs)
-
-    fn, present := handlerMap[procedure]
-    if !present {
-        log.Printf("error:  no procedure '%s'", procedure)
-        response, err := errorResponse(msgid, "no procedure: "+procedure)
-        if err != nil {
-            log.Printf("error making err response:", err)
-            return
-        }
-        results <- response
-        return
+    if e == nil {
+        out, e = successResponse (msgid, res.GetData())
     }
-
-    result, err := fn(procedureArgs)
-    if err != nil {
-        log.Printf("error calling procedure '%s': %s", procedure, err)
-        response, err := errorResponse(msgid, err.Error())
-        if err != nil {
-            log.Printf("error making err response:", err)
-            return
-        }
-        results <- response
-        return
+    if e != nil {
+        out = errorResponse (msgid,  e.Error())
     }
+    results <- out
 
-    response, err := successResponse(msgid, result)
-    if err != nil {
-        log.Printf("error making success response:", err)
-        return
-    }
-    results <- response
-
-    log.Printf("rpc execute time: %.3f ms", (float64)(time.Now().Sub(startTime))/1e6)
+    log.Printf("rpc execute time: %.3f ms", 
+        (float64)(time.Now().Sub(startTime))/1e6)
 }
 
 func errorResponse(msgid uint32, message string) ([]byte, error) {
