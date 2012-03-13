@@ -4,17 +4,10 @@ package mpack
 
 import (
     "encoding/binary"
-    "fmt"
     "io"
     "reflect"
+    "log"
 )
-
-/*
- type FullReader interface {
- io.ByteReader
- io.Reader
- }
- */
 
 type PackReader struct {
     reader io.Reader
@@ -40,11 +33,9 @@ func (pr *PackReader) incOffset (i int) {
 
 func (pr *PackReader) ReadBinary(result interface{}) error {
     e := binary.Read(pr.reader, binary.BigEndian, result)
-    fmt.Printf("before: %d\n", pr.offset);
     if e == nil {
         pr.incOffset (binary.Size(result));
     }
-    fmt.Printf("after: %d\n", pr.offset);
     return e
 }
 
@@ -139,7 +130,6 @@ func (pr *PackReader) unpack() (interface{}, int, error) {
 
     if err == nil {
         b, err = pr.ReadUint8()
-        fmt.Printf("AZZ %d\n", int (b));
     }
 
     doswitch := false
@@ -228,14 +218,14 @@ func (pr *PackReader) unpack() (interface{}, int, error) {
                 iRes, err = pr.unpackMap(length)
             }
         default:
-            fmt.Printf("unhandled type prefix: %x\n", b)
+            log.Printf("unhandled type prefix: %x\n", b)
         }
     }
 
     numRead := pr.offset;
 
     if framed && err == nil && numRead != frame {
-        fmt.Printf ("bad frame value: %d v %d", numRead, frame);
+        log.Printf ("bad frame value: %d v %d", numRead, frame);
     }
 
     return iRes, numRead, err
