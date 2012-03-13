@@ -30,10 +30,10 @@ type RpcHandler interface {
     Handle(string, *jsonw.Wrapper) (*jsonw.Wrapper, error)
 }
 
-func NewServerConn (conn net.Conn, framed bool) (sc *ServerConn) {
+func NewServerConn (srv *Server, conn net.Conn) (sc *ServerConn) {
     sc = new (ServerConn);
     sc.conn = conn
-    sc.framed = framed
+    sc.srv = srv
     sc.results = make(chan []byte, 1024)
     sc.quit = make(chan bool)
     return
@@ -92,7 +92,7 @@ func (sc *ServerConn) serve() {
         if err != nil {
             gogo = true;
         } else {
-            go srv.processRpc (json.NewWrapper(rpc), sc.results)
+            go sc.srv.processRpc (jsonw.NewWrapper(rpc), sc.results)
         }
     }
     sc.quit <- true
@@ -128,7 +128,7 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
 
     if prfx, e = rpc.AtIndex(0).GetInt(); e != nil {
         log.Printf("Error reading prefix byte: %s", e)
-    } else if prfx != rpc_request {
+    } else if byte(prfx) != rpc_request {
         log.Printf("did not receive an rpc request")
     } else if msgid, e = rpc.AtIndex(1).GetUint (); e != nil {
         log.Printf("Bad msgid ID received: %s", e);
@@ -146,10 +146,10 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
     var out []byte
 
     if e == nil {
-        out, e = successResponse (msgid, res.GetData(), srv.framed)
+        out, e = successResponse (uint32(msgid), res.GetData(), srv.framed)
     }
     if e != nil {
-        out = errorResponse (msgid, e.Error(), srv.framed)
+        out,_ = errorResponse (uint32(msgid), e.Error(), srv.framed)
     }
     results <- out
 
