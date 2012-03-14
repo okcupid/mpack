@@ -89,10 +89,9 @@ func (sc *ServerConn) serve() {
 
     gogo := true
     for ; gogo; {
-        log.Printf("in gogogogog loop\n")
         rpc, _, err := Unpack(sc.conn, sc.srv.framed)
         if err != nil {
-            gogo = true;
+            gogo = false;
         } else {
             go sc.srv.processRpc (jsonw.NewWrapper(rpc), sc.results)
         }
