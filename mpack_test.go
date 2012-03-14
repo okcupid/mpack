@@ -7,6 +7,7 @@ import (
     "reflect"
     "testing"
     "io"
+	"github.com/maxtaco/jsonw"
     )
 
 func MyPack(w io.Writer, v interface{}) (int, error) {
@@ -304,6 +305,40 @@ func TestPackUnpackMap(t *testing.T) {
     }
     tmp(t, false)
     tmp(t, true)
+}
+
+func TestBiggishVector (t *testing.T) {
+    tmp := func (t *testing.T, framed bool, L int) {
+        v := make([]uint64, L, L)
+        b := new(bytes.Buffer)
+        for i := 0; i < L; i++ {
+            v[i] = uint64(127 * i * i * i - 3*i*i - 5 *i + 161)
+        }
+        n, err := Pack (b, v, framed)
+        if err != nil {
+            t.Fatal(err);
+        }
+        x, n2, err := Unpack(b,framed)
+        if err != nil {
+            t.Fatal(err);
+        }
+
+        if n != n2 {
+            t.Fatalf("different bytes in %d and out %d\n", n, n2)
+        }
+        w := jsonw.NewWrapper(x);
+        for i := 0; i < L; i++ {
+            if x,e := w.AtIndex(i).GetUint(); e != nil {
+                t.Fatalf("error access at index %d: %s", i, e)
+            } else if x != v[i] {
+                t.Fatalf("mismatch at index %d: %d v %d", i, x, v[i])
+            }
+        }
+    }
+    tmp (t, false, 100)
+    tmp (t, true, 1000)
+    tmp (t, true, 10000)
+    tmp (t, true, 100000)
 }
 
 var a_to_pack = []interface{}{0, 1, 1314136620, 12.0, 12.0}
