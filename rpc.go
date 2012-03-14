@@ -83,12 +83,13 @@ func (srv *Server) ListenAndServe() error {
 
 func (sc *ServerConn) serve() {
 
-    log.Printf("connection established: %s", sc.conn)
+    log.Printf("connection established: %s\n", sc.conn)
 
     go sc.sendResults()
 
     gogo := false
     for ; gogo; {
+        log.Printf("in gogogogog loop\n")
         rpc, _, err := Unpack(sc.conn, sc.srv.framed)
         if err != nil {
             gogo = true;
