@@ -7,7 +7,7 @@ import (
     "io"
     "reflect"
     "log"
-	"github.com/maxtaco/jsonw"
+    "github.com/okcupid/jsonw"
 )
 
 type PackReader struct {

@@ -9,7 +9,7 @@ import (
     "net"
     "sync"
     "time"
-	"github.com/maxtaco/jsonw"
+    "github.com/okcupid/jsonw"
 )
 
 type Server struct {

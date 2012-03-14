@@ -7,7 +7,7 @@ import (
     "reflect"
     "testing"
     "io"
-	"github.com/maxtaco/jsonw"
+    "github.com/okcupid/jsonw"
     )
 
 func MyPack(w io.Writer, v interface{}) (int, error) {
