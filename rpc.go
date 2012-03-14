@@ -63,7 +63,7 @@ func (srv *Server) ListenAndServe() error {
 
     if err == nil { 
 
-        log.Printf("Starting server run loop, listening on %s.", srv.host)
+        log.Printf("Starting server run loop, listening on %s", srv.host)
 
         for {
             log.Printf("waiting for connections")
@@ -128,8 +128,6 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
     var args *jsonw.Wrapper
     var res jsonw.Wrapper
     var resdat interface{}
-
-    log.Printf("incoming arg: %s", rpc.GetDataOrNil());
 
     if prfx, e = rpc.AtIndex(0).GetInt(); e != nil {
         log.Printf("Error reading prefix byte: %s", e)
