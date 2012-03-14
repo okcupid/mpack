@@ -27,7 +27,7 @@ type ServerConn struct {
 }
 
 type RpcHandler interface {
-    Handle(string, *jsonw.Wrapper) (*jsonw.Wrapper, error)
+    Handle(string, jsonw.Wrapper) (jsonw.Wrapper, error)
 }
 
 func NewServerConn (srv *Server, conn net.Conn) (sc *ServerConn) {
@@ -63,7 +63,6 @@ func (srv *Server) ListenAndServe() error {
 
     if err == nil { 
 
-        defer listener.Close()
         log.Printf("Starting server run loop, listening on %s.", srv.host)
 
         for {
@@ -76,6 +75,8 @@ func (srv *Server) ListenAndServe() error {
                 go sc.serve();
             }
         }
+
+        listener.Close()
     }
     return err
 }
@@ -124,7 +125,8 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
     var prfx int64
     var msgid uint64
     var procedure string
-    var args, res *jsonw.Wrapper
+    var args *jsonw.Wrapper
+    var res jsonw.Wrapper
     var resdat interface{}
 
     if prfx, e = rpc.AtIndex(0).GetInt(); e != nil {
@@ -141,7 +143,7 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
     } else {
         log.Printf("rpc request: msgid=%d, proc=%s, args=%s", 
             msgid, procedure, args.GetDataOrNil())
-        res, e = srv.handler.Handle (procedure, args);
+        res, e = srv.handler.Handle (procedure, *args);
     }
 
     if e == nil {
