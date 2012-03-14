@@ -87,7 +87,7 @@ func (sc *ServerConn) serve() {
 
     go sc.sendResults()
 
-    gogo := false
+    gogo := true
     for ; gogo; {
         log.Printf("in gogogogog loop\n")
         rpc, _, err := Unpack(sc.conn, sc.srv.framed)
