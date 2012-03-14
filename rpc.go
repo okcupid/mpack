@@ -129,6 +129,8 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
     var res jsonw.Wrapper
     var resdat interface{}
 
+    log.Printf("incoming arg: %s", rpc.GetDataOrNil());
+
     if prfx, e = rpc.AtIndex(0).GetInt(); e != nil {
         log.Printf("Error reading prefix byte: %s", e)
     } else if byte(prfx) != rpc_request {
