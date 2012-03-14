@@ -298,8 +298,9 @@ func (pw *PackWriter) flush() (n int, e error) {
             // This is the best way I found to throw away offset number of bytes
             pw.buffer.Next(offset)
 
-            // Copy the prefix over...
-            copy (tmp.Bytes()[0:frame_len], pw.buffer.Bytes()[0:frame_len]);
+            // Copy the prefix over.  In go's copy, the
+            // destination comes first, and the source second
+            copy (pw.buffer.Bytes()[0:frame_len], tmp.Bytes()[0:frame_len]);
 
             // Reset the offset to be the number of bytes read
             pw.offset = nbytes + frame_len

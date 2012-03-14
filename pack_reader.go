@@ -7,16 +7,18 @@ import (
     "io"
     "reflect"
     "log"
+	"github.com/maxtaco/jsonw"
 )
 
 type PackReader struct {
     reader io.Reader
     framed bool
     offset int
+    first bool
 }
 
 func (pr *PackReader) expectFraming() bool {
-    return pr.framed && pr.offset == 0
+    return pr.framed && pr.first
 }
 
 func NewPackReader(r io.Reader, f bool) *PackReader {
@@ -24,6 +26,7 @@ func NewPackReader(r io.Reader, f bool) *PackReader {
     result.reader = r
     result.framed = f
     result.offset = 0
+    result.first = true
     return result
 }
 
@@ -111,7 +114,8 @@ func (pr *PackReader) unpackMap(length uint32) (res map[interface{}]interface{},
 
 func (pr *PackReader) unpack() (interface{}, int, error) {
 
-    frame := 0;
+    frame := 0
+    frame_len := 0
     var b uint8;
     var err error = nil;
 
@@ -122,10 +126,19 @@ func (pr *PackReader) unpack() (interface{}, int, error) {
     // Threaded implementation won't need to worry, so we can
     // just throw the framing away....
     if framed {
-        var tmp uint32
-        tmp, err = pr.ReadUint32()
+        pr.first = false
+        var tmp interface{}
+        tmp, frame_len, err = pr.unpack()
         if err == nil {
-            frame = int(tmp);
+            w := jsonw.NewWrapper(tmp)
+            var i int64
+            i, err = w.GetInt()
+            if err == nil {
+                frame = int (i)
+                // Reset the offset so that we start counting from the
+                // inside of the frame
+                pr.offset = 0
+            }
         }
     }
 
@@ -229,6 +242,6 @@ func (pr *PackReader) unpack() (interface{}, int, error) {
         log.Printf ("bad frame value: %d v %d", numRead, frame);
     }
 
-    return iRes, numRead, err
+    return iRes, numRead + frame_len, err
 }
 

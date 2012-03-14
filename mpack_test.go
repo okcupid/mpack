@@ -271,30 +271,39 @@ func TestPackUnpackString(t *testing.T) {
 }
 
 func TestPackUnpackMap(t *testing.T) {
-    b := new(bytes.Buffer)
-    m := make(map[string]int)
-    m["s1"] = 78
-    m["t"] = 3600
-    m["i"] = 60
-    m["o"] = 0
-    n, err := MyPack(b, m)
-    if err != nil {
-        t.Fatal(err)
+    tmp := func (t *testing.T, framed bool) {
+    
+        b := new(bytes.Buffer)
+        m := make(map[string]int)
+        m["s1"] = 78
+        m["t"] = 3600
+        m["i"] = 60
+        m["o"] = 0
+        n, err := Pack(b, m, framed)
+        if err != nil {
+            t.Fatal(err)
+        }
+        s := 16
+        if framed {
+            s += 1;
+        }
+        if n != s {
+            t.Fatalf("expected packed size to be 16, not %d", n)
+        }
+        
+        x, n, err := Unpack(b, framed)
+        if err != nil {
+            t.Fatal(err)
+        }
+        if n != s {
+            t.Fatalf("expected unpack to consume 16 bytes, not %d", n)
+        }
+        fmt.Printf("unpacked map: %s\n", x)
+        y := x.(map[interface{}]interface{})
+        fmt.Printf("y[s1] = %d\n", y["s1"])
     }
-    if n != 16 {
-        t.Fatalf("expected packed size to be 16, not %d", n)
-    }
-
-    x, n, err := MyUnpack(b)
-    if err != nil {
-        t.Fatal(err)
-    }
-    if n != 16 {
-        t.Fatalf("expected unpack to consume 16 bytes, not %d", n)
-    }
-    fmt.Printf("unpacked map: %s\n", x)
-    y := x.(map[interface{}]interface{})
-    fmt.Printf("y[s1] = %d\n", y["s1"])
+    tmp(t, false)
+    tmp(t, true)
 }
 
 var a_to_pack = []interface{}{0, 1, 1314136620, 12.0, 12.0}
