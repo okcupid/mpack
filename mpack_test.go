@@ -142,7 +142,7 @@ func TestPackUnpackByteArray(t *testing.T) {
     if n != 5 {
         t.Fatalf("expected unpack to consume 5 bytes, not %d", n)
     }
-    ba := x.([]byte)
+    ba := []byte(x.(string))
     if ba[0] != 0x34 || ba[1] != 0x56 || ba[2] != 0x78 || ba[3] != 0x90 {
         t.Fatal("unpack didn't match")
     }
@@ -166,7 +166,7 @@ func TestPackUnpackRaw16(t *testing.T) {
     if n != 203 {
         t.Fatalf("expected unpack to consume 203 bytes, not %d", n)
     }
-    ba := x.([]byte)
+    ba := []byte(x.(string))
     if len(ba) != 200 {
         t.Fatal("unpack didn't match")
     }
@@ -190,24 +190,9 @@ func TestPackUnpackRaw32(t *testing.T) {
     if n != 79005 {
         t.Fatalf("expected unpack to consume 79005 bytes, not %d", n)
     }
-    ba := x.([]byte)
+    ba := []byte(x.(string))
     if len(ba) != 79000 {
         t.Fatal("unpack didn't match")
-    }
-}
-
-func TestArrayAppend(t *testing.T) {
-    a := []interface{}{10, 100, 10000, 100000000}
-    arr := NewArray(a)
-    if arr.Len() != 4 {
-        t.Fatalf("expected array size to be 4")
-    }
-    arr.Append(uint64(19))
-    if arr.Len() != 5 {
-        t.Fatalf("expected array size to be 5 after append")
-    }
-    if arr.UintItem(4) != uint64(19) {
-        t.Fatalf("expected array elt 4 to be 19, not %v", arr.UintItem(4))
     }
 }
 
@@ -244,11 +229,6 @@ func TestPackUnpackArray(t *testing.T) {
         ui[i] = uint32(v.Uint())
     }
     fmt.Printf("converted array: %s\n", ui)
-
-    arr := NewArray(x)
-    if arr.Len() != 4 {
-        t.Errorf("expected arr length to be 4, not %d", arr.Len())
-    }
 }
 
 func TestPackUnpackString(t *testing.T) {
@@ -300,7 +280,7 @@ func TestPackUnpackMap(t *testing.T) {
             t.Fatalf("expected unpack to consume 16 bytes, not %d", n)
         }
         fmt.Printf("unpacked map: %s\n", x)
-        y := x.(map[interface{}]interface{})
+        y := x.(map[string]interface{})
         fmt.Printf("y[s1] = %d\n", y["s1"])
     }
     tmp(t, false)
