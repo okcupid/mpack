@@ -95,7 +95,7 @@ func (srv *Server) ListenAndServe() error {
 func (sc *ServerConn) serve() {
 
     if (sc.srv.Logging & LOG_CONNECTIONS) != 0 {
-        log.Printf("connection established: %s\n", sc.conn)
+        log.Printf("connection established: %s\n", sc.conn.RemoteAddr())
     }
 
     go sc.sendResults()
