@@ -12,10 +12,19 @@ import (
     "github.com/okcupid/jsonw"
 )
 
+const (
+    LOG_CONNECTIONS uint64 = 0x1
+    LOG_TRACE uint64 = 0x2
+    LOG_TIMINGS uint64 = 0x4
+    LOG_STARTUP uint64 = 0x8
+)
+
+
 type Server struct {
     host string
     framed bool
     handler RpcHandler
+    Logging uint64
 }
 
 type ServerConn struct {
@@ -44,6 +53,7 @@ func NewServer (host string, framed bool, h RpcHandler) (s *Server) {
     s.host = host;
     s.framed = framed
     s.handler = h;
+    s.Logging = (LOG_STARTUP|LOG_CONNECTIONS)
     return
 }
 
@@ -63,10 +73,11 @@ func (srv *Server) ListenAndServe() error {
 
     if err == nil { 
 
-        log.Printf("Starting server run loop, listening on %s", srv.host)
+        if (srv.Logging & LOG_STARTUP) != 0 {
+            log.Printf("Starting server run loop, listening on %s", srv.host)
+        }
 
         for {
-            log.Printf("waiting for connections")
             conn, err := listener.Accept()
             if err != nil {
                 log.Printf("accept error: %v", err)
@@ -83,7 +94,9 @@ func (srv *Server) ListenAndServe() error {
 
 func (sc *ServerConn) serve() {
 
-    log.Printf("connection established: %s\n", sc.conn)
+    if (sc.srv.Logging & LOG_CONNECTIONS) != 0 {
+        log.Printf("connection established: %s\n", sc.conn)
+    }
 
     go sc.sendResults()
 
@@ -109,7 +122,7 @@ func (sc *ServerConn) sendResults() {
                 log.Printf("error writing result: %s", err)
             }
             if n != len(result) {
-                log.Printf("didn't fully write result.  wrote %d bytes, not %d bytes", n, len(result))
+                log.Printf("didn't fully write result. wrote %d bytes, not %d bytes", n, len(result))
             }
         case <- sc.quit:
             gogo = false
@@ -141,9 +154,15 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
         log.Printf ("No arguments found: %s", args.Error());
         e = args.Error()
     } else {
-        log.Printf("rpc request: msgid=%d, proc=%s, args=%s", 
-            msgid, procedure, args.GetDataOrNil())
+        if (srv.Logging & LOG_TRACE) != 0 {
+            log.Printf("rpc request: msgid=%d, proc=%s, args=%s", 
+                msgid, procedure, args.GetDataOrNil())
+        }
         res, e = srv.handler.Handle (procedure, *args);
+        if (srv.Logging & LOG_TRACE) != 0 {
+            log.Printf("rpc request: msgid=%d, proc=%s, res=%s, err=%s", 
+                msgid, procedure, res.GetDataOrNil(), e)
+        }
     }
 
     if e == nil {
@@ -160,8 +179,10 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
     }
     results <- out
 
-    log.Printf("rpc execute time: %.3f ms", 
-        (float64)(time.Now().Sub(startTime))/1e6)
+    if (srv.Logging & LOG_TIMINGS) != 0 {
+        log.Printf("rpc execute time: %.3f ms", 
+            (float64)(time.Now().Sub(startTime))/1e6)
+    }
 }
 
 func errorResponse(msgid uint32, message string, framed bool) ([]byte, error) {
