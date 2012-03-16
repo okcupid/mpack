@@ -129,10 +129,8 @@ func (pr *PackReader) unpack() (interface{}, int, error) {
 		tmp, frame_len, err = pr.unpack()
 		if err == nil {
 			w := jsonw.NewWrapper(tmp)
-			var i int64
-			i, err = w.GetInt()
+			frame, err = w.GetInt()
 			if err == nil {
-				frame = int(i)
 				// Reset the offset so that we start counting from the
 				// inside of the frame
 				pr.offset = 0

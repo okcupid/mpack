@@ -122,8 +122,8 @@ func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
     startTime := time.Now()
 
     var e error
-    var prfx int64
-    var msgid uint64
+    var prfx int
+    var msgid uint
     var procedure string
     var args *jsonw.Wrapper
     var res jsonw.Wrapper
@@ -256,7 +256,7 @@ func (cli *Client) ReadOne() bool {
             s = e.Error();
         }
         log.Printf("%s: error: %s", host, s);
-    } else if id, e := response.AtIndex(1).GetInt(); e != nil {
+    } else if id, e := response.AtIndex(1).GetInt64(); e != nil {
         log.Printf("%s: no msgid found: %s", host, e)
     } else if output, present := cli.outputChannels[id]; !present {
         log.Printf("%s: no output channel found for msgid %d", host, id)

@@ -308,7 +308,7 @@ func TestBiggishVector (t *testing.T) {
         }
         w := jsonw.NewWrapper(x);
         for i := 0; i < L; i++ {
-            if x,e := w.AtIndex(i).GetUint(); e != nil {
+            if x,e := w.AtIndex(i).GetUint64(); e != nil {
                 t.Fatalf("error access at index %d: %s", i, e)
             } else if x != v[i] {
                 t.Fatalf("mismatch at index %d: %d v %d", i, x, v[i])
