@@ -146,7 +146,7 @@ func (pr *PackReader) unpack() (interface{}, int, error) {
 
 	if err == nil {
 
-		if b < positive_fix_max {
+		if b <= positive_fix_max {
 			iRes = b
 		} else if b >= negative_fix_min && b <= negative_fix_max {
 			iRes = (b & negative_fix_mask) - negative_fix_offset
