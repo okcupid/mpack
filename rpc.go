@@ -13,10 +13,11 @@ import (
 )
 
 const (
-    LOG_CONNECTIONS uint64 = 0x1
-    LOG_TRACE uint64 = 0x2
-    LOG_TIMINGS uint64 = 0x4
-    LOG_STARTUP uint64 = 0x8
+    LOG_NONE uint64 = 0x0
+    LOG_CONNECTIONS uint64 = 0x1  // 'c'
+    LOG_TRACE uint64 = 0x2        // 't'
+    LOG_TIMINGS uint64 = 0x4      // 'T'
+    LOG_STARTUP uint64 = 0x8      // 's'
 )
 
 
@@ -55,6 +56,24 @@ func NewServer (host string, framed bool, h RpcHandler) (s *Server) {
     s.handler = h;
     s.Logging = (LOG_STARTUP|LOG_CONNECTIONS)
     return
+}
+
+func (srv *Server) SetLogging (s string) uint64 {
+    srv.Logging = 0
+
+    arr := []byte(s)
+    for i := 0; i < len(s); i++ {
+        bit := LOG_NONE
+        switch c := arr[i] ; true {
+        case c == 'c': bit = LOG_CONNECTIONS
+        case c == 't': bit = LOG_TRACE
+        case c == 'T': bit = LOG_TIMINGS
+        case c == 's': bit = LOG_STARTUP
+        default: log.Printf("unknown msgpack RPC debug switch: '%c'\n", c)
+        }
+        if bit != LOG_NONE { srv.Logging |= bit }
+    }
+    return srv.Logging
 }
 
 func (srv *Server) ListenAndServe() error {
