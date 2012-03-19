@@ -3,412 +3,418 @@
 package mpack
 
 import (
-    "bytes"
-    "io"
-    "log"
-    "net"
-    "sync"
-    "time"
-    "github.com/okcupid/jsonw"
+	"bytes"
+	"github.com/okcupid/jsonw"
+	"io"
+	"log"
+	"net"
+	"sync"
+	"time"
 )
 
 const (
-    LOG_NONE uint64 = 0x0
-    LOG_CONNECTIONS uint64 = 0x1  // 'c'
-    LOG_TRACE uint64 = 0x2        // 't'
-    LOG_TIMINGS uint64 = 0x4      // 'T'
-    LOG_STARTUP uint64 = 0x8      // 's'
+	LOG_NONE        uint64 = 0x0
+	LOG_CONNECTIONS uint64 = 0x1           // 'c'
+	LOG_TRACE       uint64 = 0x2           // 't'
+	LOG_TIMINGS     uint64 = 0x4           // 'T'
+	LOG_STARTUP     uint64 = 0x8           // 's'
+	LOG_ALL         uint64 = (1 << 63) - 1 // 'A'
 )
 
-
 type Server struct {
-    host string
-    framed bool
-    handler RpcHandler
-    Logging uint64
+	host    string
+	framed  bool
+	handler RpcHandler
+	Logging uint64
 }
 
 type ServerConn struct {
-    conn net.Conn
-    framed bool
-    results chan []byte
-    quit chan bool
-    srv *Server
+	conn    net.Conn
+	framed  bool
+	results chan []byte
+	quit    chan bool
+	srv     *Server
 }
 
 type RpcHandler interface {
-    Handle(string, jsonw.Wrapper) (jsonw.Wrapper, error)
+	Handle(string, jsonw.Wrapper) (jsonw.Wrapper, error)
 }
 
-func NewServerConn (srv *Server, conn net.Conn) (sc *ServerConn) {
-    sc = new (ServerConn);
-    sc.conn = conn
-    sc.srv = srv
-    sc.results = make(chan []byte, 1024)
-    sc.quit = make(chan bool)
-    return
+func NewServerConn(srv *Server, conn net.Conn) (sc *ServerConn) {
+	sc = new(ServerConn)
+	sc.conn = conn
+	sc.srv = srv
+	sc.results = make(chan []byte, 1024)
+	sc.quit = make(chan bool)
+	return
 }
 
-func NewServer (host string, framed bool, h RpcHandler) (s *Server) {
-    s = new (Server)
-    s.host = host;
-    s.framed = framed
-    s.handler = h;
-    s.Logging = (LOG_STARTUP|LOG_CONNECTIONS)
-    return
+func NewServer(host string, framed bool, h RpcHandler) (s *Server) {
+	s = new(Server)
+	s.host = host
+	s.framed = framed
+	s.handler = h
+	s.Logging = (LOG_STARTUP | LOG_CONNECTIONS)
+	return
 }
 
-func (srv *Server) SetLogging (s string) uint64 {
-    srv.Logging = 0
+func (srv *Server) SetLogging(s string) uint64 {
+	srv.Logging = 0
 
-    arr := []byte(s)
-    for i := 0; i < len(s); i++ {
-        bit := LOG_NONE
-        switch c := arr[i] ; true {
-        case c == 'c': bit = LOG_CONNECTIONS
-        case c == 't': bit = LOG_TRACE
-        case c == 'T': bit = LOG_TIMINGS
-        case c == 's': bit = LOG_STARTUP
-        default: log.Printf("unknown msgpack RPC debug switch: '%c'\n", c)
-        }
-        if bit != LOG_NONE { srv.Logging |= bit }
-    }
-    return srv.Logging
+	arr := []byte(s)
+	for i := 0; i < len(s); i++ {
+		bit := LOG_NONE
+		switch c := arr[i]; true {
+		case c == 'c':
+			bit = LOG_CONNECTIONS
+		case c == 't':
+			bit = LOG_TRACE
+		case c == 'T':
+			bit = LOG_TIMINGS
+		case c == 's':
+			bit = LOG_STARTUP
+		default:
+			log.Printf("unknown msgpack RPC debug switch: '%c'\n", c)
+		}
+		if bit != LOG_NONE {
+			srv.Logging |= bit
+		}
+	}
+	return srv.Logging
 }
 
 func (srv *Server) ListenAndServe() error {
 
-    tcpAddr, err := net.ResolveTCPAddr("tcp", srv.host)
-    var listener net.Listener
+	tcpAddr, err := net.ResolveTCPAddr("tcp", srv.host)
+	var listener net.Listener
 
-    if err != nil {
-        log.Printf("error resolving address %s: %s", srv.host, err)
-    } else {
-        listener, err = net.Listen(tcpAddr.Network(), tcpAddr.String())
-        if err != nil {
-            log.Printf("error listening: %s", err)
-        }
-    }
+	if err != nil {
+		log.Printf("error resolving address %s: %s", srv.host, err)
+	} else {
+		listener, err = net.Listen(tcpAddr.Network(), tcpAddr.String())
+		if err != nil {
+			log.Printf("error listening: %s", err)
+		}
+	}
 
-    if err == nil { 
+	if err == nil {
 
-        if (srv.Logging & LOG_STARTUP) != 0 {
-            log.Printf("Starting server run loop, listening on %s", srv.host)
-        }
+		if (srv.Logging & LOG_STARTUP) != 0 {
+			log.Printf("Starting server run loop, listening on %s", srv.host)
+		}
 
-        for {
-            conn, err := listener.Accept()
-            if err != nil {
-                log.Printf("accept error: %v", err)
-            } else {
-                sc := NewServerConn (srv, conn)
-                go sc.serve();
-            }
-        }
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				log.Printf("accept error: %v", err)
+			} else {
+				sc := NewServerConn(srv, conn)
+				go sc.serve()
+			}
+		}
 
-        listener.Close()
-    }
-    return err
+		listener.Close()
+	}
+	return err
 }
 
 func (sc *ServerConn) serve() {
 
-    if (sc.srv.Logging & LOG_CONNECTIONS) != 0 {
-        log.Printf("connection established: %s\n", sc.conn.RemoteAddr())
-    }
+	if (sc.srv.Logging & LOG_CONNECTIONS) != 0 {
+		log.Printf("connection established: %s\n", sc.conn.RemoteAddr())
+	}
 
-    go sc.sendResults()
+	go sc.sendResults()
 
-    gogo := true
-    for ; gogo; {
-        rpc, _, err := Unpack(sc.conn, sc.srv.framed)
-        if err != nil {
-            gogo = false;
-        } else {
-            go sc.srv.processRpc (jsonw.NewWrapper(rpc), sc.results)
-        }
-    }
-    sc.quit <- true
+	gogo := true
+	for gogo {
+		rpc, _, err := Unpack(sc.conn, sc.srv.framed)
+		if err != nil {
+			gogo = false
+		} else {
+			go sc.srv.processRpc(jsonw.NewWrapper(rpc), sc.results)
+		}
+	}
+	sc.quit <- true
 }
 
 func (sc *ServerConn) sendResults() {
-    gogo := true
-    for  ; gogo ; {
-        select {
-        case result := <- sc.results:
-            n, err := sc.conn.Write(result)
-            if err != nil {
-                log.Printf("error writing result: %s", err)
-            }
-            if n != len(result) {
-                log.Printf("didn't fully write result. wrote %d bytes, not %d bytes", n, len(result))
-            }
-        case <- sc.quit:
-            gogo = false
-        }
-    }
+	gogo := true
+	for gogo {
+		select {
+		case result := <-sc.results:
+			n, err := sc.conn.Write(result)
+			if err != nil {
+				log.Printf("error writing result: %s", err)
+			}
+			if n != len(result) {
+				log.Printf("didn't fully write result. wrote %d bytes, not %d bytes", n, len(result))
+			}
+		case <-sc.quit:
+			gogo = false
+		}
+	}
 }
 
-func (srv *Server) processRpc (rpc *jsonw.Wrapper, results chan []byte) {
+func (srv *Server) processRpc(rpc *jsonw.Wrapper, results chan []byte) {
 
-    startTime := time.Now()
+	startTime := time.Now()
 
-    var e error
-    var prfx int
-    var msgid uint
-    var procedure string
-    var args *jsonw.Wrapper
-    var res jsonw.Wrapper
-    var resdat interface{}
+	var e error
+	var prfx int
+	var msgid uint
+	var procedure string
+	var args *jsonw.Wrapper
+	var res jsonw.Wrapper
+	var resdat interface{}
 
-    if prfx, e = rpc.AtIndex(0).GetInt(); e != nil {
-        log.Printf("Error reading prefix byte: %s", e)
-    } else if byte(prfx) != rpc_request {
-        log.Printf("did not receive an rpc request")
-    } else if msgid, e = rpc.AtIndex(1).GetUint (); e != nil {
-        log.Printf("Bad msgid ID received: %s", e);
-    } else if procedure, e = rpc.AtIndex(2).GetString(); e != nil {
-        log.Printf ("Cannot find procedure name: %s", e);
-    } else if args = rpc.AtIndex(3); !args.IsOk() {
-        log.Printf ("No arguments found: %s", args.Error());
-        e = args.Error()
-    } else {
-        if (srv.Logging & LOG_TRACE) != 0 {
-            log.Printf("rpc request: msgid=%d, proc=%s, args=%s", 
-                msgid, procedure, args.GetDataOrNil())
-        }
-        res, e = srv.handler.Handle (procedure, *args);
-        if (srv.Logging & LOG_TRACE) != 0 {
-            log.Printf("rpc request: msgid=%d, proc=%s, res=%s, err=%s", 
-                msgid, procedure, res.GetDataOrNil(), e)
-        }
-    }
+	if prfx, e = rpc.AtIndex(0).GetInt(); e != nil {
+		log.Printf("Error reading prefix byte: %s", e)
+	} else if byte(prfx) != rpc_request {
+		log.Printf("did not receive an rpc request")
+	} else if msgid, e = rpc.AtIndex(1).GetUint(); e != nil {
+		log.Printf("Bad msgid ID received: %s", e)
+	} else if procedure, e = rpc.AtIndex(2).GetString(); e != nil {
+		log.Printf("Cannot find procedure name: %s", e)
+	} else if args = rpc.AtIndex(3); !args.IsOk() {
+		log.Printf("No arguments found: %s", args.Error())
+		e = args.Error()
+	} else {
+		if (srv.Logging & LOG_TRACE) != 0 {
+			log.Printf("rpc request: msgid=%d, proc=%s, args=%s",
+				msgid, procedure, args.GetDataOrNil())
+		}
+		res, e = srv.handler.Handle(procedure, *args)
+		if (srv.Logging & LOG_TRACE) != 0 {
+			log.Printf("rpc request: msgid=%d, proc=%s, res=%s, err=%s",
+				msgid, procedure, res.GetDataOrNil(), e)
+		}
+	}
 
-    if e == nil {
-        resdat, e = res.GetData()
-    }
+	if e == nil {
+		resdat, e = res.GetData()
+	}
 
-    var out []byte
+	var out []byte
 
-    if e == nil {
-        out, e = successResponse (uint32(msgid), resdat, srv.framed)
-    }
-    if e != nil {
-        out,_ = errorResponse (uint32(msgid), e.Error(), srv.framed)
-    }
-    results <- out
+	if e == nil {
+		out, e = successResponse(uint32(msgid), resdat, srv.framed)
+	}
+	if e != nil {
+		out, _ = errorResponse(uint32(msgid), e.Error(), srv.framed)
+	}
+	results <- out
 
-    if (srv.Logging & LOG_TIMINGS) != 0 {
-        log.Printf("rpc execute time: %.3f ms", 
-            (float64)(time.Now().Sub(startTime))/1e6)
-    }
+	if (srv.Logging & LOG_TIMINGS) != 0 {
+		log.Printf("rpc execute time: %.3f ms",
+			(float64)(time.Now().Sub(startTime))/1e6)
+	}
 }
 
 func errorResponse(msgid uint32, message string, framed bool) ([]byte, error) {
-    response := makeResponse(msgid)
-    response[2] = message
-    return packMessage(response, framed)
+	response := makeResponse(msgid)
+	response[2] = message
+	return packMessage(response, framed)
 }
 
 func successResponse(msgid uint32, result interface{}, framed bool) ([]byte, error) {
-    response := makeResponse(msgid)
-    response[3] = result
-    return packMessage(response, framed)
+	response := makeResponse(msgid)
+	response[3] = result
+	return packMessage(response, framed)
 }
 
 func makeResponse(msgid uint32) []interface{} {
-    response := make([]interface{}, 4)
-    response[0] = rpc_response
-    response[1] = msgid
-    response[2] = nil
-    response[3] = nil
-    return response
+	response := make([]interface{}, 4)
+	response[0] = rpc_response
+	response[1] = msgid
+	response[2] = nil
+	response[3] = nil
+	return response
 }
 
 func packMessage(message interface{}, framed bool) ([]byte, error) {
-    b := new(bytes.Buffer)
-    _, err := Pack(b, message, framed)
-    if err != nil {
-        return nil, err
-    }
-    return b.Bytes(), nil
+	b := new(bytes.Buffer)
+	_, err := Pack(b, message, framed)
+	if err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
 }
 
 type JsonWrapChan chan *jsonw.Wrapper
 
 type Client struct {
-    Host           string
-    conn           net.Conn
-    idCounter      int64
-    outputChannels map[int64]JsonWrapChan
-    Connected      bool
-    Framed         bool
+	Host           string
+	conn           net.Conn
+	idCounter      int64
+	outputChannels map[int64]JsonWrapChan
+	Connected      bool
+	Framed         bool
 }
 
 func NewClient(host string, framed bool) (*Client, error) {
-    result := new(Client)
-    result.Host = host
-    result.Framed = framed
+	result := new(Client)
+	result.Host = host
+	result.Framed = framed
 
-    result.outputChannels = make(map[int64]JsonWrapChan);
+	result.outputChannels = make(map[int64]JsonWrapChan)
 
-    tcpAddr, err := net.ResolveTCPAddr("tcp", host)
-    if err != nil {
-        return nil, err
-    }
-    result.conn, err = net.DialTCP("tcp", nil, tcpAddr)
-    if err != nil {
-        return nil, err
-    }
-    result.Connected = true
-    go result.StartReader()
-    return result, nil
+	tcpAddr, err := net.ResolveTCPAddr("tcp", host)
+	if err != nil {
+		return nil, err
+	}
+	result.conn, err = net.DialTCP("tcp", nil, tcpAddr)
+	if err != nil {
+		return nil, err
+	}
+	result.Connected = true
+	go result.StartReader()
+	return result, nil
 }
 
 func (client *Client) StartReader() {
-    gogo := true
+	gogo := true
 
-    for ; gogo ; {
-        gogo = client.ReadOne();
-    }
-    client.Connected = false
+	for gogo {
+		gogo = client.ReadOne()
+	}
+	client.Connected = false
 }
 
 func (cli *Client) ReadOne() bool {
-    generic, _, err := Unpack(cli.conn, cli.Framed)
-    host := cli.Host
-    ret := true
-    
-    if err == io.EOF {
-        log.Printf("%s: EOF", cli)
-        ret = false
-    } else if err != nil {
-        log.Printf("%s: unpack error: %s", host, err)
-    } else if response := jsonw.NewWrapper(generic); response == nil {
-        log.Printf("%s: unexpected JSON failure")
-    } else if p, e := response.AtIndex(0).GetInt(); e != nil {
-        log.Printf("%s: error decoding prefix: %s", host, e);
-    } else if byte(p) != rpc_response {
-        log.Printf("%s: didn't get rpc_response", host)
-    } else if !response.AtIndex(2).IsNil() {
-        s, e := response.AtIndex(2).GetString()
-        if e != nil {
-            s = e.Error();
-        }
-        log.Printf("%s: error: %s", host, s);
-    } else if id, e := response.AtIndex(1).GetInt64(); e != nil {
-        log.Printf("%s: no msgid found: %s", host, e)
-    } else if output, present := cli.outputChannels[id]; !present {
-        log.Printf("%s: no output channel found for msgid %d", host, id)
-    } else if reply, e := response.AtIndex(3).GetData(); e != nil {
-        log.Printf("%s: invalid reply sent: %s", host, e);
-    } else {
-        output <- jsonw.NewWrapper(reply)
-        delete(cli.outputChannels, id);
-    }
-    return ret
+	generic, _, err := Unpack(cli.conn, cli.Framed)
+	host := cli.Host
+	ret := true
+
+	if err == io.EOF {
+		log.Printf("%s: EOF", cli)
+		ret = false
+	} else if err != nil {
+		log.Printf("%s: unpack error: %s", host, err)
+	} else if response := jsonw.NewWrapper(generic); response == nil {
+		log.Printf("%s: unexpected JSON failure")
+	} else if p, e := response.AtIndex(0).GetInt(); e != nil {
+		log.Printf("%s: error decoding prefix: %s", host, e)
+	} else if byte(p) != rpc_response {
+		log.Printf("%s: didn't get rpc_response", host)
+	} else if !response.AtIndex(2).IsNil() {
+		s, e := response.AtIndex(2).GetString()
+		if e != nil {
+			s = e.Error()
+		}
+		log.Printf("%s: error: %s", host, s)
+	} else if id, e := response.AtIndex(1).GetInt64(); e != nil {
+		log.Printf("%s: no msgid found: %s", host, e)
+	} else if output, present := cli.outputChannels[id]; !present {
+		log.Printf("%s: no output channel found for msgid %d", host, id)
+	} else if reply, e := response.AtIndex(3).GetData(); e != nil {
+		log.Printf("%s: invalid reply sent: %s", host, e)
+	} else {
+		output <- jsonw.NewWrapper(reply)
+		delete(cli.outputChannels, id)
+	}
+	return ret
 }
 
 // XXX let them call this with multiple params and wrap them in an array
 func (client *Client) CallSync(procedure string, params *jsonw.Wrapper) (res *jsonw.Wrapper, err error) {
-    ch := make(JsonWrapChan)
-    err = client.Call(procedure, params, ch)
-    if err == nil {
-        res = <- ch
-    }
-    return 
+	ch := make(JsonWrapChan)
+	err = client.Call(procedure, params, ch)
+	if err == nil {
+		res = <-ch
+	}
+	return
 }
-
 
 // XXX let them call this with multiple params and wrap them in an array
 func (client *Client) Call(procedure string, params *jsonw.Wrapper, output JsonWrapChan) error {
 
-    msgid := client.idCounter
-    client.idCounter += 1
+	msgid := client.idCounter
+	client.idCounter += 1
 
-    request := jsonw.NewArray(4)
-    request.SetIndex(0, jsonw.NewInt (int(rpc_request)));
-    request.SetIndex(1, jsonw.NewInt (int(msgid)));
-    request.SetIndex(2, jsonw.NewString (procedure));
-    args := jsonw.NewArray(1)
-    args.SetIndex(0, params)
-    request.SetIndex(3, args);
+	request := jsonw.NewArray(4)
+	request.SetIndex(0, jsonw.NewInt(int(rpc_request)))
+	request.SetIndex(1, jsonw.NewInt(int(msgid)))
+	request.SetIndex(2, jsonw.NewString(procedure))
+	args := jsonw.NewArray(1)
+	args.SetIndex(0, params)
+	request.SetIndex(3, args)
 
-    msg, err := packMessage(request.GetDataOrNil(), client.Framed)
-    if err != nil {
-        log.Printf("Error packing message: %s", err)
-        return err
-    }
-    client.outputChannels[msgid] = output
-    client.conn.Write(msg)
+	msg, err := packMessage(request.GetDataOrNil(), client.Framed)
+	if err != nil {
+		log.Printf("Error packing message: %s", err)
+		return err
+	}
+	client.outputChannels[msgid] = output
+	client.conn.Write(msg)
 
-    return nil
+	return nil
 }
 
 func (client *Client) IsConnected() bool {
-    return client.Connected
+	return client.Connected
 }
 
 func (client *Client) Close() {
-    client.Connected = false
-    client.conn.Close()
+	client.Connected = false
+	client.conn.Close()
 }
 
 type ClientPool struct {
-    Host    string
-    MaxSize int
-    clients []*Client
-    lock    *sync.Mutex
-    Framed  bool
+	Host    string
+	MaxSize int
+	clients []*Client
+	lock    *sync.Mutex
+	Framed  bool
 }
 
 func NewClientPool(host string, framed bool) *ClientPool {
-    result := new(ClientPool)
-    result.Host = host
-    result.lock = new(sync.Mutex)
-    result.MaxSize = 10
-    result.Framed = framed
-    return result
+	result := new(ClientPool)
+	result.Host = host
+	result.lock = new(sync.Mutex)
+	result.MaxSize = 10
+	result.Framed = framed
+	return result
 }
 
 func (cp *ClientPool) Get() (*Client, error) {
-    cp.lock.Lock()
-    defer cp.lock.Unlock()
+	cp.lock.Lock()
+	defer cp.lock.Unlock()
 
-    for len(cp.clients) > 0 {
-        n := len(cp.clients)
-        result := cp.clients[n-1]
-        cp.clients = cp.clients[:n-1]
-        if result.Connected {
-            return result, nil
-        }
-        log.Printf("discarding disconnected client")
-        // XXX could check for stale connections like Pool does...
-    }
+	for len(cp.clients) > 0 {
+		n := len(cp.clients)
+		result := cp.clients[n-1]
+		cp.clients = cp.clients[:n-1]
+		if result.Connected {
+			return result, nil
+		}
+		log.Printf("discarding disconnected client")
+		// XXX could check for stale connections like Pool does...
+	}
 
-    result, err := NewClient(cp.Host, cp.Framed)
-    if err != nil {
-        return nil, err
-    }
-    return result, nil
+	result, err := NewClient(cp.Host, cp.Framed)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (cp *ClientPool) Put(client *Client) {
-    cp.lock.Lock()
-    defer cp.lock.Unlock()
+	cp.lock.Lock()
+	defer cp.lock.Unlock()
 
-    if client.Connected == false {
-        log.Printf("returning a disconnected client...closing...")
-        client.Close()
-        log.Printf("close finished")
-        return
-    }
+	if client.Connected == false {
+		log.Printf("returning a disconnected client...closing...")
+		client.Close()
+		log.Printf("close finished")
+		return
+	}
 
-    if len(cp.clients) >= cp.MaxSize {
-        log.Printf("pool is full, discarding client")
-        client.Close()
-        return
-    }
+	if len(cp.clients) >= cp.MaxSize {
+		log.Printf("pool is full, discarding client")
+		client.Close()
+		return
+	}
 
-    cp.clients = append(cp.clients, client)
+	cp.clients = append(cp.clients, client)
 }
