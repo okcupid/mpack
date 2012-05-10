@@ -305,7 +305,7 @@ func (client *Client) CallSync(procedure string, params *jsonw.Wrapper) (res *js
 	return
 }
 
-// XXX let them call this with multiple params and wrap them in an array
+// params is a dictionary
 func (client *Client) Call(procedure string, params *jsonw.Wrapper, output JsonWrapChan) error {
 
 	msgid := client.idCounter
@@ -315,9 +315,7 @@ func (client *Client) Call(procedure string, params *jsonw.Wrapper, output JsonW
 	request.SetIndex(0, jsonw.NewInt(int(rpc_request)))
 	request.SetIndex(1, jsonw.NewInt(int(msgid)))
 	request.SetIndex(2, jsonw.NewString(procedure))
-	args := jsonw.NewArray(1)
-	args.SetIndex(0, params)
-	request.SetIndex(3, args)
+	request.SetIndex(3, params)
 
 	msg, err := packMessage(request.GetDataOrNil(), client.Framed)
 	if err != nil {
