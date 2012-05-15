@@ -64,30 +64,30 @@ func TestPackInt8(t *testing.T) {
 }
 
 type MyHandler struct {
-	t *testing.T;
-	proc string;
+	t    *testing.T
+	proc string
 }
 
 func (myh *MyHandler) Handle(proc string, arg jsonw.Wrapper) (res jsonw.Wrapper, e error) {
 	if proc != myh.proc {
-		e = fmt.Errorf("process %s was not found; I only handle %s", proc, myh.proc);
+		e = fmt.Errorf("process %s was not found; I only handle %s", proc, myh.proc)
 	} else {
-		a, e1 := arg.AtKey("a").GetInt();
-		b, e2 := arg.AtKey("b").GetInt();
-		var msg string;
+		a, e1 := arg.AtKey("a").GetInt()
+		b, e2 := arg.AtKey("b").GetInt()
+		var msg string
 		if e1 != nil {
-			msg = fmt.Sprintf("In getting a: %s", e1);	
+			msg = fmt.Sprintf("In getting a: %s", e1)
 		} else if e2 != nil {
-			msg = fmt.Sprintf("In getting b: %s", e2);	
+			msg = fmt.Sprintf("In getting b: %s", e2)
 		}
-		if len (msg) == 0 && a != b {
-			msg = fmt.Sprintf("Value error: %d != %d", a, b);
+		if len(msg) == 0 && a != b {
+			msg = fmt.Sprintf("Value error: %d != %d", a, b)
 		}
 		if len(msg) == 0 {
-			res.SetKey("status", jsonw.NewInt (0))
+			res.SetKey("status", jsonw.NewInt(0))
 		} else {
-			res.SetKey("status", jsonw.NewInt (10));
-			res.SetKey("error", jsonw.NewString (msg));
+			res.SetKey("status", jsonw.NewInt(10))
+			res.SetKey("error", jsonw.NewString(msg))
 		}
 	}
 	return
@@ -95,8 +95,8 @@ func (myh *MyHandler) Handle(proc string, arg jsonw.Wrapper) (res jsonw.Wrapper,
 
 func NewHandler(t *testing.T, proc string) (myh *MyHandler) {
 	myh = new(MyHandler)
-	myh.t = t;
-	myh.proc = proc;
+	myh.t = t
+	myh.proc = proc
 	return
 }
 
@@ -108,8 +108,8 @@ func runServer(addr string, proc string, t *testing.T) {
 }
 
 func TestClientAndServer(t *testing.T) {
-	addr := "localhost:9912";
-	proc := "test.1.test";
+	addr := "localhost:9912"
+	proc := "test.1.test"
 	go runServer(addr, proc, t)
 }
 

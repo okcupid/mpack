@@ -3,27 +3,26 @@
 package mpack
 
 import (
-    "io"
-    )
+	"io"
+)
 
 func Pack(w io.Writer, value interface{}, framed bool) (n int, e error) {
-    //	stime := time.Nanoseconds()
-    pw := NewPackWriter(w, framed)
-    e = pw.pack(value)
+	//	stime := time.Nanoseconds()
+	pw := NewPackWriter(w, framed)
+	e = pw.pack(value)
 
-    if e == nil {
-        n,e = pw.flush()
-    }
+	if e == nil {
+		n, e = pw.flush()
+	}
 
+	//	etime := time.Nanoseconds()
+	//	msecs := (float64)(etime-stime) / 1000000
+	//	fmt.Printf("pack time: %.3fms\n", msecs)
 
-    //	etime := time.Nanoseconds()
-    //	msecs := (float64)(etime-stime) / 1000000
-    //	fmt.Printf("pack time: %.3fms\n", msecs)
-
-    return
+	return
 }
 
 func Unpack(reader io.Reader, framed bool) (interface{}, int, error) {
-    pr := NewPackReader(reader, framed)
-    return pr.unpack()
+	pr := NewPackReader(reader, framed)
+	return pr.unpack()
 }

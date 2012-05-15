@@ -26,7 +26,7 @@ type Server struct {
 	host    string
 	framed  bool
 	handler RpcHandler
-    Logger *logchan.Logger
+	Logger  *logchan.Logger
 }
 
 type ServerConn struct {
@@ -55,14 +55,14 @@ func NewServer(host string, framed bool, h RpcHandler) (s *Server) {
 	s.host = host
 	s.framed = framed
 	s.handler = h
-    ch := logchan.Channels { 
-        logchan.Channel { LOG_NONE,        '0', "no logging" },
-        logchan.Channel { LOG_CONNECTIONS, 'c', "connections" },
-        logchan.Channel { LOG_TRACE,       't', "trace" },
-        logchan.Channel { LOG_TIMINGS,     'T', "timings" },
-        logchan.Channel { LOG_STARTUP,     's', "startup" },
-        logchan.Channel { LOG_ALL,         'A', "all" } }
-    s.Logger = logchan.NewLogger(ch,  LOG_STARTUP | LOG_CONNECTIONS );
+	ch := logchan.Channels{
+		logchan.Channel{LOG_NONE, '0', "no logging"},
+		logchan.Channel{LOG_CONNECTIONS, 'c', "connections"},
+		logchan.Channel{LOG_TRACE, 't', "trace"},
+		logchan.Channel{LOG_TIMINGS, 'T', "timings"},
+		logchan.Channel{LOG_STARTUP, 's', "startup"},
+		logchan.Channel{LOG_ALL, 'A', "all"}}
+	s.Logger = logchan.NewLogger(ch, LOG_STARTUP|LOG_CONNECTIONS)
 	return
 }
 
@@ -82,8 +82,8 @@ func (srv *Server) ListenAndServe() error {
 
 	if err == nil {
 
-        srv.Logger.Printf(LOG_STARTUP,
-            "Starting server run loop, listening on %s", srv.host)
+		srv.Logger.Printf(LOG_STARTUP,
+			"Starting server run loop, listening on %s", srv.host)
 
 		for {
 			conn, err := listener.Accept()
@@ -161,13 +161,13 @@ func (srv *Server) processRpc(rpc *jsonw.Wrapper, results chan []byte) {
 		log.Printf("No arguments found: %s", args.Error())
 		e = args.Error()
 	} else {
-        srv.Logger.Printf(LOG_TRACE,
+		srv.Logger.Printf(LOG_TRACE,
 			"rpc request: msgid=%d, proc=%s, args=%s",
 			msgid, procedure, args.GetDataOrNil())
 
 		res, e = srv.handler.Handle(procedure, *args)
 
-        srv.Logger.Printf(LOG_TRACE,
+		srv.Logger.Printf(LOG_TRACE,
 			"rpc request: msgid=%d, proc=%s, res=%s, err=%s",
 			msgid, procedure, res.GetDataOrNil(), e)
 	}
@@ -186,7 +186,7 @@ func (srv *Server) processRpc(rpc *jsonw.Wrapper, results chan []byte) {
 	}
 	results <- out
 
-    srv.Logger.Printf(LOG_TIMINGS, "rpc execute time: %.3f ms",
+	srv.Logger.Printf(LOG_TIMINGS, "rpc execute time: %.3f ms",
 		(float64)(time.Now().Sub(startTime))/1e6)
 }
 
