@@ -127,12 +127,10 @@ func TestClientAndServer(t *testing.T) {
 		msg, _ := res.AtKey("error").GetString()
 		t.Fatalf("Equality failed: %s", msg)
 	}
-	/*
-		res, e = cli.CallSync("0dice", arg);
-		if e == nil {
-			t.Fatalf("Expected an error, didn't get it");
-		}
-	*/
+	res, e = cli.CallSync("0dice", arg)
+	if e == nil {
+		t.Fatalf("Expected an error, didn't get it")
+	}
 }
 
 /*

@@ -4,6 +4,7 @@ package mpack
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/okcupid/jsonw"
 	"github.com/okcupid/logchan"
 	"io"
@@ -220,6 +221,11 @@ func packMessage(message interface{}, framed bool) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
+type ReplyPair struct {
+	res jsonw.Wrapper
+	e   *error
+}
+
 type JsonWrapChan chan *jsonw.Wrapper
 
 type Client struct {
@@ -276,16 +282,19 @@ func (cli *Client) ReadOne() bool {
 		log.Printf("%s: error decoding prefix: %s", host, e)
 	} else if byte(p) != rpc_response {
 		log.Printf("%s: didn't get rpc_response", host)
-	} else if !response.AtIndex(2).IsNil() {
-		s, e := response.AtIndex(2).GetString()
-		if e != nil {
-			s = e.Error()
-		}
-		log.Printf("%s: error: %s", host, s)
 	} else if id, e := response.AtIndex(1).GetInt64(); e != nil {
 		log.Printf("%s: no msgid found: %s", host, e)
 	} else if output, present := cli.outputChannels[id]; !present {
 		log.Printf("%s: no output channel found for msgid %d", host, id)
+	} else if !response.AtIndex(2).IsNil() {
+		s, e := response.AtIndex(2).GetString()
+		if e != nil {
+			s = e.Error()
+		} else {
+			output <- nil
+			delete(cli.outputChannels, id)
+		}
+		log.Printf("%s: error: %s", host, s)
 	} else if reply, e := response.AtIndex(3).GetData(); e != nil {
 		log.Printf("%s: invalid reply sent: %s", host, e)
 	} else {
@@ -301,6 +310,9 @@ func (client *Client) CallSync(procedure string, params *jsonw.Wrapper) (res *js
 	err = client.Call(procedure, params, ch)
 	if err == nil {
 		res = <-ch
+		if res == nil {
+			err = fmt.Errorf("Unknown procedure: %s", procedure)
+		}
 	}
 	return
 }
