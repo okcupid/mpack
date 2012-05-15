@@ -83,6 +83,7 @@ func (myh *MyHandler) Handle(proc string, arg jsonw.Wrapper) (res jsonw.Wrapper,
 		if len(msg) == 0 && a != b {
 			msg = fmt.Sprintf("Value error: %d != %d", a, b)
 		}
+		res = *jsonw.NewDictionary();
 		if len(msg) == 0 {
 			res.SetKey("status", jsonw.NewInt(0))
 		} else {
@@ -111,6 +112,21 @@ func TestClientAndServer(t *testing.T) {
 	addr := "localhost:9912"
 	proc := "test.1.test"
 	go runServer(addr, proc, t)
+	cli, e := NewClient(addr, true);
+	if e != nil {
+		t.Fatalf ("problem in connect: %s", e)
+	} 
+	arg := jsonw.NewDictionary()
+
+	arg.SetKey("a", jsonw.NewInt (1234));
+	arg.SetKey("b", jsonw.NewInt (1234));
+	res, e2 := cli.CallSync(proc, arg) 
+	if e2 != nil {
+		t.Fatalf ("problem in call to %s: %s", proc, e);
+	} else if i, _ := res.AtKey("status").GetInt(); i != 0 {
+		msg, _ := res.AtKey("error").GetString();
+		t.Fatalf ("Equality failed: %s", msg);
+	}
 }
 
 /*
