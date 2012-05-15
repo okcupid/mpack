@@ -3,7 +3,7 @@ default:
 	go build
 
 fmt:
-	go fmt -w *.go
+	gofmt -w *.go
 
 test:
 	go test
