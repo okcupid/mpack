@@ -130,6 +130,8 @@ func TestClientAndServer(t *testing.T) {
 	res, e = cli.CallSync("0dice", arg)
 	if e == nil {
 		t.Fatalf("Expected an error, didn't get it")
+	} else {
+		fmt.Printf("Got back error as expected: %s\n", e);
 	}
 }
 

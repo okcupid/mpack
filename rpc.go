@@ -4,7 +4,6 @@ package mpack
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/okcupid/jsonw"
 	"github.com/okcupid/logchan"
 	"io"
@@ -222,9 +221,17 @@ func packMessage(message interface{}, framed bool) ([]byte, error) {
 }
 
 type ReplyPair struct {
-	res jsonw.Wrapper
-	e   *error
+	data *jsonw.Wrapper
+	err  error
 }
+
+type Error struct {
+	msg string
+}
+
+func (e Error) Error() string { return e.msg; }
+
+type ReplyPairChan chan ReplyPair;
 
 type JsonWrapChan chan *jsonw.Wrapper
 
@@ -232,7 +239,7 @@ type Client struct {
 	Host           string
 	conn           net.Conn
 	idCounter      int64
-	outputChannels map[int64]JsonWrapChan
+	outputChannels map[int64]ReplyPairChan
 	Connected      bool
 	Framed         bool
 }
@@ -242,7 +249,7 @@ func NewClient(host string, framed bool) (*Client, error) {
 	result.Host = host
 	result.Framed = framed
 
-	result.outputChannels = make(map[int64]JsonWrapChan)
+	result.outputChannels = make(map[int64]ReplyPairChan)
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", host)
 	if err != nil {
@@ -286,19 +293,24 @@ func (cli *Client) ReadOne() bool {
 		log.Printf("%s: no msgid found: %s", host, e)
 	} else if output, present := cli.outputChannels[id]; !present {
 		log.Printf("%s: no output channel found for msgid %d", host, id)
-	} else if !response.AtIndex(2).IsNil() {
-		s, e := response.AtIndex(2).GetString()
-		if e != nil {
-			s = e.Error()
-		} else {
-			output <- nil
-			delete(cli.outputChannels, id)
-		}
-		log.Printf("%s: error: %s", host, s)
-	} else if reply, e := response.AtIndex(3).GetData(); e != nil {
-		log.Printf("%s: invalid reply sent: %s", host, e)
 	} else {
-		output <- jsonw.NewWrapper(reply)
+		var rp ReplyPair;
+		if !response.AtIndex(2).IsNil() {
+			s, e := response.AtIndex(2).GetString()
+			if e != nil {
+				rp.err = e;
+				s = e.Error();
+			} else {
+				rp.err = Error{s};
+			}
+			log.Printf("%s: error: %s", host, s)
+		} else if reply, e := response.AtIndex(3).GetData(); e != nil {
+			rp.err = e;
+			log.Printf("%s: invalid reply sent: %s", host, e)
+		} else {
+			rp.data = jsonw.NewWrapper (reply);
+		}
+		output <- rp;
 		delete(cli.outputChannels, id)
 	}
 	return ret
@@ -306,19 +318,20 @@ func (cli *Client) ReadOne() bool {
 
 // XXX let them call this with multiple params and wrap them in an array
 func (client *Client) CallSync(procedure string, params *jsonw.Wrapper) (res *jsonw.Wrapper, err error) {
-	ch := make(JsonWrapChan)
+	ch := make(ReplyPairChan)
 	err = client.Call(procedure, params, ch)
 	if err == nil {
-		res = <-ch
-		if res == nil {
-			err = fmt.Errorf("Unknown procedure: %s", procedure)
+		rp := <-ch
+		if rp.err != nil {
+			err = rp.err;
 		}
+		res = rp.data;
 	}
 	return
 }
 
 // params is a dictionary
-func (client *Client) Call(procedure string, params *jsonw.Wrapper, output JsonWrapChan) error {
+func (client *Client) Call(procedure string, params *jsonw.Wrapper, output ReplyPairChan) error {
 
 	msgid := client.idCounter
 	client.idCounter += 1
