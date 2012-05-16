@@ -229,9 +229,9 @@ type Error struct {
 	msg string
 }
 
-func (e Error) Error() string { return e.msg; }
+func (e Error) Error() string { return e.msg }
 
-type ReplyPairChan chan ReplyPair;
+type ReplyPairChan chan ReplyPair
 
 type JsonWrapChan chan *jsonw.Wrapper
 
@@ -294,23 +294,23 @@ func (cli *Client) ReadOne() bool {
 	} else if output, present := cli.outputChannels[id]; !present {
 		log.Printf("%s: no output channel found for msgid %d", host, id)
 	} else {
-		var rp ReplyPair;
+		var rp ReplyPair
 		if !response.AtIndex(2).IsNil() {
 			s, e := response.AtIndex(2).GetString()
 			if e != nil {
-				rp.err = e;
-				s = e.Error();
+				rp.err = e
+				s = e.Error()
 			} else {
-				rp.err = Error{s};
+				rp.err = Error{s}
 			}
 			log.Printf("%s: error: %s", host, s)
 		} else if reply, e := response.AtIndex(3).GetData(); e != nil {
-			rp.err = e;
+			rp.err = e
 			log.Printf("%s: invalid reply sent: %s", host, e)
 		} else {
-			rp.data = jsonw.NewWrapper (reply);
+			rp.data = jsonw.NewWrapper(reply)
 		}
-		output <- rp;
+		output <- rp
 		delete(cli.outputChannels, id)
 	}
 	return ret
@@ -323,9 +323,9 @@ func (client *Client) CallSync(procedure string, params *jsonw.Wrapper) (res *js
 	if err == nil {
 		rp := <-ch
 		if rp.err != nil {
-			err = rp.err;
+			err = rp.err
 		}
-		res = rp.data;
+		res = rp.data
 	}
 	return
 }

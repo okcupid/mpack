@@ -108,6 +108,17 @@ func runServer(addr string, proc string, t *testing.T) {
 	}
 }
 
+func doClientTest(t *testing.T, proc string, cli *Client, arg *jsonw.Wrapper) {
+
+	res, e := cli.CallSync(proc, arg)
+	if e != nil {
+		t.Fatalf("problem in call to %s: %s\n", proc, e)
+	} else if i, _ := res.AtKey("status").GetInt(); i != 0 {
+		msg, _ := res.AtKey("error").GetString()
+		t.Fatalf("Equality failed: %s", msg)
+	}
+}
+
 func TestClientAndServer(t *testing.T) {
 	addr := "localhost:9912"
 	proc := "test.1.test"
@@ -116,23 +127,45 @@ func TestClientAndServer(t *testing.T) {
 	if e != nil {
 		t.Fatalf("problem in connect: %s", e)
 	}
-	arg := jsonw.NewDictionary()
 
+	arg := jsonw.NewDictionary()
 	arg.SetKey("a", jsonw.NewInt(1234))
 	arg.SetKey("b", jsonw.NewInt(1234))
+	doClientTest(t, proc, cli, arg)
+
+	arg.SetKey("a", jsonw.NewInt(1235))
 	res, e2 := cli.CallSync(proc, arg)
 	if e2 != nil {
-		t.Fatalf("problem in call to %s: %s", proc, e)
-	} else if i, _ := res.AtKey("status").GetInt(); i != 0 {
-		msg, _ := res.AtKey("error").GetString()
-		t.Fatalf("Equality failed: %s", msg)
+		t.Fatalf("problem in call to %s: %s\n", proc, e2)
+	} else if i, _ := res.AtKey("status").GetInt(); i == 0 {
+		t.Fatalf("Did not expect equality!\n")
 	}
+	arg.SetKey("a", jsonw.NewInt(1234))
+
 	res, e = cli.CallSync("0dice", arg)
 	if e == nil {
 		t.Fatalf("Expected an error, didn't get it")
 	} else {
-		fmt.Printf("Got back error as expected: %s\n", e);
+		fmt.Printf("Got back error as expected: %s\n", e)
 	}
+	cp := NewClientPool(addr, true)
+
+	poolcli, e3 := cp.Get()
+	if e3 != nil {
+		t.Fatalf("Failed to get from pool: %s\n", e3)
+	}
+	doClientTest(t, proc, poolcli, arg)
+	poolcli2, e4 := cp.Get()
+	if e4 != nil {
+		t.Fatalf("Failed to get from pool: %s\n", e4)
+	}
+	doClientTest(t, proc, poolcli2, arg)
+	cp.Put(poolcli)
+	poolcli, e3 = cp.Get()
+	if e3 != nil {
+		t.Fatalf("Failed to get from pool: %s\n", e3)
+	}
+	doClientTest(t, proc, poolcli, arg)
 }
 
 /*
