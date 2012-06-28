@@ -7,6 +7,7 @@ import (
     "io"
     "reflect"
     "bytes"
+    "fmt"
     )
 
 
@@ -104,13 +105,17 @@ func (pw *PackWriter) packNegativeInt(i int64) (e error) {
 // If it's a big length, pack out the big prefix 'b'
 //
 func (pw *PackWriter) packLen(l int, s uint8, m uint8, b uint8) (e error) {
-    if l <= 0x1f {
+    fmt.Printf("input pack len %d...\n", l);
+    if l <= 0x0f {
+        fmt.Printf("case A\n");
         l |= int(s)
         e = pw.packByte (byte(l))
     } else if l <= 0xffff {
+        fmt.Printf("case B\n");
         pw.packByte(m);
         e = pw.packBinary(uint16(l))
     } else {
+        fmt.Printf("case C\n");
         pw.packByte(b);
         e = pw.packBinary(uint32(l))
     }

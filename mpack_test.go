@@ -315,7 +315,10 @@ func TestBiggishVector (t *testing.T) {
             }
         }
     }
+    tmp (t, false, 20)
+    tmp (t, true, 20)
     tmp (t, false, 100)
+    tmp (t, true, 100)
     tmp (t, true, 1000)
     tmp (t, true, 10000)
     tmp (t, true, 100000)
