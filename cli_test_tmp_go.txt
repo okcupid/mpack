@@ -1,0 +1,33 @@
+
+package main
+
+import (
+	"fmt"
+	"github.com/okcupid/jsonw"
+	"mpack"
+	)
+
+func main() {
+	if cli, e := mpack.NewClient("localhost:4041", true); e != nil {
+		fmt.Println ("problem in connect: %s", e)
+	} else {
+		arg := jsonw.NewDictionary()
+		arg.SetKey("name", jsonw.NewString ("maxlock2"))
+		arg.SetKey("wait", jsonw.NewInt (100))
+		fmt.Println ("yooo...");
+		if res, e2 := cli.CallSync("lock.1.acquire", arg) ; e2 != nil {
+			fmt.Println ("problem in callsync: %s", e);
+		} else {
+			fmt.Printf ("res 1: %s\n", res.GetDataOrNil())
+			
+			arg = jsonw.NewDictionary()
+			arg.SetKey("name", jsonw.NewString ("maxlock2"))
+			arg.SetKey("lid", res.AtKey("lock"))
+			if res, e = cli.CallSync("lock.1.release", arg); e != nil {
+				fmt.Println("problem in call 2: %s", e);
+			} else {
+				fmt.Println ("res 2: %+v", res)
+			}
+		}
+	}
+}

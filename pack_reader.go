@@ -2,11 +2,11 @@ package mpack
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"github.com/okcupid/jsonw"
 	"io"
 	"log"
-	"errors"
-	"fmt"
 )
 
 type PackReader struct {
@@ -102,7 +102,7 @@ func (pr *PackReader) unpackMap(length uint32) (res map[string]interface{}, err 
 		} else if s, ok := key.(string); ok {
 			res[s] = val
 		} else {
-			msg := fmt.Sprintf ("non-string keys for maps not allowed (%s)", key)
+			msg := fmt.Sprintf("non-string keys for maps not allowed (%s)", key)
 			err = errors.New(msg)
 		}
 	}
