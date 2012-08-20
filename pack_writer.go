@@ -80,7 +80,7 @@ func (pw *PackWriter) packPositiveInt(u uint64) (e error) {
 
 func (pw *PackWriter) packNegativeInt(i int64) (e error) {
 	if i >= -32 {
-		e = pw.packByte(byte(i))
+		e = pw.packBinary(int8(i))
 	} else if i >= -128 {
 		pw.packByte(type_int8)
 		e = pw.packBinary(int8(i))

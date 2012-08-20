@@ -149,7 +149,7 @@ func (pr *PackReader) unpack() (interface{}, int, error) {
 		if b <= positive_fix_max {
 			iRes = b
 		} else if b >= negative_fix_min && b <= negative_fix_max {
-			iRes = (b & negative_fix_mask) - negative_fix_offset
+			iRes = int8(b)
 
 		} else if b >= type_fix_raw && b <= type_fix_raw_max {
 			iRes, err = pr.unpackRaw(uint32(b & fix_raw_count_mask))

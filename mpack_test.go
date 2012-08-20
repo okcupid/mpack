@@ -32,20 +32,40 @@ func TestPackPositiveFixnum(t *testing.T) {
 }
 
 func TestPackNegativeFixnum(t *testing.T) {
-	b := new(bytes.Buffer)
-	n, err := MyPack(b, int8(-13))
-	if err != nil {
-		t.Fatal(err)
+
+	tester := func (i int8) {
+		b := new(bytes.Buffer)
+
+		n, err := MyPack(b, i);
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Fatal("should have returned 1 byte")
+		}
+		if b.Len() != 1 {
+			t.Fatal("buffer should be one byte long")
+		}
+
+		var x interface{}
+		x, n, err = MyUnpack(b)
+
+		if err != nil {
+			t.Fatal(err);
+		}
+
+		if n != 1 {
+			t.Fatal("Unpack should have consumed only 1 byte");
+		}
+
+		if x.(int8) != i {
+			t.Error("byte doesn't match")
+		}
+
 	}
-	if n != 1 {
-		t.Fatal("should have returned 1 byte")
-	}
-	if b.Len() != 1 {
-		t.Fatal("buffer should be one byte long")
-	}
-	if b.Bytes()[0] != 0xf3 {
-		t.Error("byte doesn't match")
-	}
+	tester(-1);
+	tester(-13);
+	tester(-32);
 }
 
 func TestPackInt8(t *testing.T) {
