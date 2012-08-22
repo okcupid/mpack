@@ -438,6 +438,18 @@ func TestBiggishVector(t *testing.T) {
 			}
 		}
 	}
+	tmp(t, false, 10)
+	tmp(t, true, 10)
+	tmp(t, false, 5)
+	tmp(t, true, 5)
+	tmp(t, false, 8)
+	tmp(t, true, 8)
+	tmp(t, false, 15)
+	tmp(t, true, 15)
+	tmp(t, false, 16)
+	tmp(t, true, 16)
+	tmp(t, false, 17)
+	tmp(t, true, 17)
 	tmp(t, false, 20)
 	tmp(t, true, 20)
 	tmp(t, false, 100)
