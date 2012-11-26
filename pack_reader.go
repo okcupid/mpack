@@ -64,7 +64,7 @@ func (pr *PackReader) unpackRaw(length uint32) (res string, e error) {
 			pr.incOffset(n)
 			res = string(bytes)
 		} else {
-			log.Printf("error in unpack raw (len=%d): %s", length, e);
+			log.Printf("error in unpack raw (len=%d): %s\n", length, e);
 		}
 	}
 	return
@@ -237,7 +237,7 @@ func (pr *PackReader) unpack() (interface{}, int, error) {
 	numRead := pr.offset
 
 	if framed && err == nil && numRead != frame {
-		log.Printf("bad frame value: %d v %d", numRead, frame)
+		log.Printf("bad frame value: %d v %d\n", numRead, frame)
 	}
 
 	return iRes, numRead + frame_len, err
