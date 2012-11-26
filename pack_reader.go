@@ -59,7 +59,10 @@ func (pr *PackReader) unpackRaw(length uint32) (res string, e error) {
 
 	if length > 0 {
 		bytes := make([]byte, length)
-		n, e = pr.reader.Read(bytes)
+		// NB: We need to be worried about a short read here,
+		// so we keep reading until we've filled the expected
+		// number of bytes!
+		n, e = io.ReadFull(pr.reader, bytes)
 		if e == nil {
 			pr.incOffset(n)
 			res = string(bytes)
