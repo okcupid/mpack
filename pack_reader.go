@@ -63,6 +63,8 @@ func (pr *PackReader) unpackRaw(length uint32) (res string, e error) {
 		if e == nil {
 			pr.incOffset(n)
 			res = string(bytes)
+		} else {
+			log.Printf("error in unpack raw (len=%d): %s", length, e);
 		}
 	}
 	return
