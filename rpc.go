@@ -38,7 +38,7 @@ type ServerConn struct {
 }
 
 type RpcHandler interface {
-	Handle(string, jsonw.Wrapper) (jsonw.Wrapper, error)
+	Handle(string, jsonw.Wrapper, net.Conn) (jsonw.Wrapper, error)
 }
 
 func NewServerConn(srv *Server, conn net.Conn) (sc *ServerConn) {
@@ -113,7 +113,7 @@ func (sc *ServerConn) serve() {
 		if err != nil {
 			gogo = false
 		} else {
-			go sc.srv.processRpc(jsonw.NewWrapper(rpc), sc.results)
+			go sc.srv.processRpc(jsonw.NewWrapper(rpc), sc)
 		}
 	}
 	sc.quit <- true
@@ -137,7 +137,7 @@ func (sc *ServerConn) sendResults() {
 	}
 }
 
-func (srv *Server) processRpc(rpc *jsonw.Wrapper, results chan []byte) {
+func (srv *Server) processRpc(rpc *jsonw.Wrapper, sc *ServerConn) {
 
 	startTime := time.Now()
 
@@ -165,7 +165,7 @@ func (srv *Server) processRpc(rpc *jsonw.Wrapper, results chan []byte) {
 			"rpc request: msgid=%d, proc=%s, args=%s",
 			msgid, procedure, args.GetDataOrNil())
 
-		res, e = srv.handler.Handle(procedure, *args)
+		res, e = srv.handler.Handle(procedure, *args, sc.conn)
 
 		srv.Logger.Printf(LOG_TRACE,
 			"rpc request: msgid=%d, proc=%s, res=%s, err=%s",
@@ -184,7 +184,7 @@ func (srv *Server) processRpc(rpc *jsonw.Wrapper, results chan []byte) {
 	if e != nil {
 		out, _ = errorResponse(uint32(msgid), e.Error(), srv.framed)
 	}
-	results <- out
+	sc.results <- out
 
 	srv.Logger.Printf(LOG_TIMINGS, "rpc execute time: %.3f ms",
 		(float64)(time.Now().Sub(startTime))/1e6)
