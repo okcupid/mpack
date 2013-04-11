@@ -281,6 +281,9 @@ func (cli *Client) ReadOne() bool {
 	if err == io.EOF {
 		log.Printf("%s: EOF", cli)
 		ret = false
+	} else if err.Error() == "use of closed network connection" {
+		log.Printf("%s: unpack error: %s", host, err)
+		ret = false
 	} else if err != nil {
 		log.Printf("%s: unpack error: %s", host, err)
 	} else if response := jsonw.NewWrapper(generic); response == nil {
