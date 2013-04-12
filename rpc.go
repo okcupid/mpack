@@ -281,11 +281,12 @@ func (cli *Client) ReadOne() bool {
 	if err == io.EOF {
 		log.Printf("%s: EOF", cli)
 		ret = false
-	} else if err.Error() == "use of closed network connection" {
-		log.Printf("%s: unpack error: %s", host, err)
-		ret = false
 	} else if err != nil {
 		log.Printf("%s: unpack error: %s", host, err)
+
+		if err.Error() == "use of closed network connection" {
+			ret = false
+		}
 	} else if response := jsonw.NewWrapper(generic); response == nil {
 		log.Printf("%s: unexpected JSON failure")
 	} else if p, e := response.AtIndex(0).GetInt(); e != nil {

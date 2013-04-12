@@ -33,10 +33,10 @@ func TestPackPositiveFixnum(t *testing.T) {
 
 func TestPackNegativeFixnum(t *testing.T) {
 
-	tester := func (i int8) {
+	tester := func(i int8) {
 		b := new(bytes.Buffer)
 
-		n, err := MyPack(b, i);
+		n, err := MyPack(b, i)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,11 +51,11 @@ func TestPackNegativeFixnum(t *testing.T) {
 		x, n, err = MyUnpack(b)
 
 		if err != nil {
-			t.Fatal(err);
+			t.Fatal(err)
 		}
 
 		if n != 1 {
-			t.Fatal("Unpack should have consumed only 1 byte");
+			t.Fatal("Unpack should have consumed only 1 byte")
 		}
 
 		if x.(int8) != i {
@@ -63,9 +63,9 @@ func TestPackNegativeFixnum(t *testing.T) {
 		}
 
 	}
-	tester(-1);
-	tester(-13);
-	tester(-32);
+	tester(-1)
+	tester(-13)
+	tester(-32)
 }
 
 func TestPackInt8(t *testing.T) {
